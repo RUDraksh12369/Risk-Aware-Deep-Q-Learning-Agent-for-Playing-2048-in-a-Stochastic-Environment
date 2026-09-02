@@ -1,0 +1,55 @@
+How to run this project
+=======================
+
+1. Create and activate a virtual environment
+
+Windows PowerShell:
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+macOS/Linux:
+python -m venv venv
+source venv/bin/activate
+
+2. Install dependencies
+
+pip install -r requirements.txt
+
+3. Run tests
+
+pytest -q
+
+4. Run quick console smoke tests
+
+python -m game.game
+python -m game.environment
+
+5. Run the presentation/demo GUI
+
+Human playable mode:
+python -m gui.pygame_demo --mode human
+
+Heuristic autoplay demo:
+python -m gui.pygame_demo --mode heuristic --delay-ms 180
+
+Random autoplay demo:
+python -m gui.pygame_demo --mode random --seed 42
+
+Trained/custom agent demo:
+python -m gui.pygame_demo --mode agent --agent package.module:choose_action
+
+The GUI is only for presenting the project and showing agent behavior. It is
+not used for training or automated testing.
+
+GUI controls
+============
+
+Human mode:
+- Arrow keys or WASD: move tiles
+- R: restart
+- Q or Esc: quit
+
+Autoplay modes:
+- Space: pause/resume
+- R: restart
+- Q or Esc: quit

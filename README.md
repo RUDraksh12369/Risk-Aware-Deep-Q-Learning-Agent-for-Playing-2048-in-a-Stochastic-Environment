@@ -24,6 +24,24 @@ python -m game.game          # pure mechanics demo (a few scripted moves)
 python -m game.environment   # RL-wrapper demo (one full random episode)
 ```
 
+## Demo GUI
+
+The pygame GUI is for presentation/demo use only. It renders the project's
+existing `Game2048` engine and is not used by training or tests.
+
+```bash
+python -m gui.pygame_demo --mode human
+python -m gui.pygame_demo --mode heuristic --delay-ms 180
+python -m gui.pygame_demo --mode random --seed 42
+```
+
+For a trained agent demo, expose a callable that returns one of
+`game.game.Action` or action ids `0..3`, then run:
+
+```bash
+python -m gui.pygame_demo --mode agent --agent package.module:choose_action
+```
+
 ## Repository structure
 
 ```
