@@ -32,6 +32,9 @@ python -m gui.pygame_demo --mode human
 Heuristic autoplay demo:
 python -m gui.pygame_demo --mode heuristic --delay-ms 180
 
+Pure MCTS autoplay demo:
+python -m gui.pygame_demo --mode mcts --delay-ms 140 --mcts-simulations 200
+
 Random autoplay demo:
 python -m gui.pygame_demo --mode random --seed 42
 
@@ -52,4 +55,5 @@ Human mode:
 Autoplay modes:
 - Space: pause/resume
 - R: restart
+- Use the sidebar buttons/slider, or +/- keys, to adjust speed
 - Q or Esc: quit

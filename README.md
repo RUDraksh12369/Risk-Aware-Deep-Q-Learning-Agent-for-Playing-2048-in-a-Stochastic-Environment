@@ -32,6 +32,7 @@ existing `Game2048` engine and is not used by training or tests.
 ```bash
 python -m gui.pygame_demo --mode human
 python -m gui.pygame_demo --mode heuristic --delay-ms 180
+python -m gui.pygame_demo --mode mcts --delay-ms 140 --mcts-simulations 200
 python -m gui.pygame_demo --mode random --seed 42
 ```
 
@@ -72,7 +73,7 @@ python -m gui.pygame_demo --mode agent --agent package.module:choose_action
 
 - [x] Step 1: 2048 environment (`game/game.py`, `game/environment.py`) + unit tests
 - [ ] Step 2: Random & Heuristic baselines
-- [ ] Step 3: Expectimax baseline
+- [x] Step 3: Pure Monte Carlo Tree Search demo agent
 - [ ] Step 4: Evaluation framework (metrics harness)
 - [ ] Step 5: Standard DQN (MLP) + replay buffer + target network + training loop
 - [ ] Step 6: Board Risk Index + action-specific risk module
