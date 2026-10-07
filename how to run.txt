@@ -24,7 +24,18 @@ pytest -q
 python -m game.game
 python -m game.environment
 
-5. Run the presentation/demo GUI
+5. Train and evaluate the DQN agent
+
+Train the enhanced Dueling Double-DQN for a fixed number of episodes:
+python -m training.train --episodes 2000 --checkpoint models\dqn_2048_enhanced.pt
+
+Evaluate it greedily across 100 fresh games:
+python -m training.evaluate --checkpoint models\dqn_2048_enhanced.pt --episodes 100
+
+The trainer saves intermediate checkpoints every 250 episodes. The enhanced
+checkpoint is preferred automatically by the GUI when it exists.
+
+6. Run the presentation/demo GUI
 
 Human playable mode:
 python -m gui.pygame_demo --mode human
@@ -38,8 +49,14 @@ python -m gui.pygame_demo --mode mcts --delay-ms 140 --mcts-simulations 200
 Random autoplay demo:
 python -m gui.pygame_demo --mode random --seed 42
 
-Trained/custom agent demo:
-python -m gui.pygame_demo --mode agent --agent package.module:choose_action
+Trained DQN autoplay demo (after training completes):
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
+
+Use a specific checkpoint instead of the automatic enhanced/original choice
+(Windows PowerShell example):
+$env:DQN_CHECKPOINT = "models\dqn_2048_enhanced.pt"
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
+Remove-Item Env:DQN_CHECKPOINT
 
 The GUI is only for presenting the project and showing agent behavior. It is
 not used for training or automated testing.

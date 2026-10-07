@@ -22,6 +22,8 @@ PYTHONPATH=. python3 tests/test_game.py
 ```bash
 python -m game.game          # pure mechanics demo (a few scripted moves)
 python -m game.environment   # RL-wrapper demo (one full random episode)
+python -m training.train --episodes 2000 --checkpoint models/dqn_2048_enhanced.pt
+python -m training.evaluate --checkpoint models/dqn_2048_enhanced.pt --episodes 100
 ```
 
 ## Demo GUI
@@ -40,8 +42,20 @@ For a trained agent demo, expose a callable that returns one of
 `game.game.Action` or action ids `0..3`, then run:
 
 ```bash
-python -m gui.pygame_demo --mode agent --agent package.module:choose_action
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action
 ```
+
+`training.train` uses a masked Dueling Double DQN: the MLP receives the 16
+log2 tile exponents, experience replay decorrelates updates, score rewards are
+scaled for stable Q-targets, and the target network is softly synchronized.
+Illegal moves are excluded in both behaviour and bootstrapping, which is
+important because the environment otherwise permits them. Training runs for
+the requested number of episodes. A checkpoint is saved after training (and
+every 250 episodes by default).
+
+The GUI automatically prefers `models/dqn_2048_enhanced.pt` when it exists,
+falling back to the original `models/dqn_2048.pt` checkpoint. Set
+`DQN_CHECKPOINT` to select a specific saved model.
 
 ## Repository structure
 
