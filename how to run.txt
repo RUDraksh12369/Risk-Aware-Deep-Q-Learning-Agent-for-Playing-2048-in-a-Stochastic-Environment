@@ -74,3 +74,5 @@ Autoplay modes:
 - R: restart
 - Use the sidebar buttons/slider, or +/- keys, to adjust speed
 - Q or Esc: quit
+
+python -m training.train --episodes 10000 --device cuda         to train on gpu
