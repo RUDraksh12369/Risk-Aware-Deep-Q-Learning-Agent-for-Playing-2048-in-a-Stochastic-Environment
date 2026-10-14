@@ -73,6 +73,11 @@ python -m gui.pygame_demo --mode random --seed 42
 Trained DQN autoplay demo (after training completes):
 python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
 
+Trained Dueling DQN autoplay demo (after Dueling DQN fine-tuning completes):
+$env:DQN_CHECKPOINT = "models\dueling_dqn_2048.pt"
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
+Remove-Item Env:DQN_CHECKPOINT
+
 Use a specific checkpoint instead of the automatic enhanced/original choice
 (Windows PowerShell example):
 $env:DQN_CHECKPOINT = "models\dqn_2048_enhanced.pt"
