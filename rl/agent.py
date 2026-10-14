@@ -127,11 +127,14 @@ class DQNAgent:
         self.online_net.train()
         predicted_q = self.online_net(states).gather(1, actions).squeeze(1)
         with torch.no_grad():
-            online_next_q = self.online_net(next_states).masked_fill(~next_mask, -torch.inf)
             if self.config.double_dqn:
-                next_actions = online_next_q.argmax(dim=1, keepdim=True)
-                next_q = self.target_net(next_states).gather(1, next_actions).squeeze(1)
+                # Keep the existing config/checkpoint interface compatible
+                # while the algorithm lives in its dedicated module.
+                from rl.doubledqn import double_dqn_next_q
+
+                next_q = double_dqn_next_q(self.online_net, self.target_net, next_states, next_mask)
             else:
+                # Standard DQN both selects and evaluates with the target network.
                 next_q = self.target_net(next_states).masked_fill(~next_mask, -torch.inf).max(dim=1).values
             # A terminal state normally has no legal action. Treat an empty
             # mask defensively the same way, so malformed/off-policy data

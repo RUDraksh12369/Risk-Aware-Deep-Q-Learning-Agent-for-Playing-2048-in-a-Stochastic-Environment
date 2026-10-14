@@ -57,6 +57,29 @@ The GUI automatically prefers `models/dqn_2048_enhanced.pt` when it exists,
 falling back to the original `models/dqn_2048.pt` checkpoint. Set
 `DQN_CHECKPOINT` to select a specific saved model.
 
+### Separate Double DQN training
+
+`rl/doubledqn.py` provides `DoubleDQNAgent` and the Double DQN next-action
+calculation. It reuses the existing DQN network, replay buffer, learning loop,
+and evaluation interface. The online network selects the best legal next
+action and the target network evaluates it; terminal states do not bootstrap.
+The original `DQNAgent` and its `double_dqn=False` standard-DQN option remain
+available. Algorithm tests live in `tests/test_doubledqn.py`.
+
+The dedicated trainer initializes fresh weights; it does not load the saved
+DQN checkpoint. Its default output is `models/doubledqn_2048.pt`.
+
+```bash
+# Short CPU smoke run with learning enabled
+python -m training.train_doubledqn --episodes 1 --max-steps-per-episode 32 --batch-size 4 --min-replay-size 4 --device cpu --checkpoint models/doubledqn_smoke.pt
+
+# Full training, when ready
+python -m training.train_doubledqn --episodes 2000 --checkpoint models/doubledqn_2048.pt
+
+# Evaluate using the existing evaluator
+python -m training.evaluate --checkpoint models/doubledqn_2048.pt --episodes 100
+```
+
 ## Repository structure
 
 ```
