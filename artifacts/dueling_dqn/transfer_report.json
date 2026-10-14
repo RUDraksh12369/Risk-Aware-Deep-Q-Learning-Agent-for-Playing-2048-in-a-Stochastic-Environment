@@ -1,0 +1,26 @@
+{
+  "online_transferred": [
+    "feature_extractor.0.weight -> feature_extractor.0.weight",
+    "feature_extractor.0.bias -> feature_extractor.0.bias",
+    "feature_extractor.2.weight -> feature_extractor.2.weight",
+    "feature_extractor.2.bias -> feature_extractor.2.bias",
+    "value_stream.weight -> value_stream.weight",
+    "value_stream.bias -> value_stream.bias",
+    "advantage_stream.weight -> advantage_stream.weight",
+    "advantage_stream.bias -> advantage_stream.bias"
+  ],
+  "target_transferred": [
+    "feature_extractor.0.weight -> feature_extractor.0.weight",
+    "feature_extractor.0.bias -> feature_extractor.0.bias",
+    "feature_extractor.2.weight -> feature_extractor.2.weight",
+    "feature_extractor.2.bias -> feature_extractor.2.bias",
+    "value_stream.weight -> value_stream.weight",
+    "value_stream.bias -> value_stream.bias",
+    "advantage_stream.weight -> advantage_stream.weight",
+    "advantage_stream.bias -> advantage_stream.bias"
+  ],
+  "initialized": [],
+  "optimizer": [
+    "restored"
+  ]
+}

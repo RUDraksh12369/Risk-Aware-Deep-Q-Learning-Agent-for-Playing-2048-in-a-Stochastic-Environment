@@ -35,7 +35,28 @@ python -m training.evaluate --checkpoint models\dqn_2048_enhanced.pt --episodes 
 The trainer saves intermediate checkpoints every 250 episodes. The enhanced
 checkpoint is preferred automatically by the GUI when it exists.
 
-6. Run the presentation/demo GUI
+6. Fine-tune, resume, and evaluate the separate Dueling DQN
+
+These commands use rl\duelingDQN.py and never overwrite the original DQN
+checkpoint, logs, or results.
+
+Fine-tune Dueling DQN from the pretrained original checkpoint:
+python -m rl.duelingDQN train --pretrained models\dqn_2048.pt --episodes 100
+
+Resume an existing Dueling DQN checkpoint:
+python -m rl.duelingDQN train --resume models\dueling_dqn_2048.pt --episodes 100
+
+Evaluate Dueling DQN greedily across 100 fresh games:
+python -m rl.duelingDQN evaluate --checkpoint models\dueling_dqn_2048.pt --episodes 100
+
+Compare the original DQN and Dueling DQN using the same evaluation seeds:
+python -m rl.duelingDQN compare --dqn-checkpoint models\dqn_2048.pt --dueling-checkpoint models\dueling_dqn_2048.pt --episodes 100
+
+Dueling checkpoints are saved to models\dueling_dqn_2048.pt. Its training
+history, transfer report, evaluation metrics, and comparison results are saved
+separately under artifacts\dueling_dqn\.
+
+7. Run the presentation/demo GUI
 
 Human playable mode:
 python -m gui.pygame_demo --mode human

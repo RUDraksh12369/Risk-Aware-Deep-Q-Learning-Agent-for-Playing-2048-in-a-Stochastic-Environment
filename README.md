@@ -26,6 +26,37 @@ python -m training.train --episodes 2000 --checkpoint models/dqn_2048_enhanced.p
 python -m training.evaluate --checkpoint models/dqn_2048_enhanced.pt --episodes 100
 ```
 
+## Dueling DQN (separate from the original DQN)
+
+The original DQN remains independently runnable with its existing entrypoints:
+
+```bash
+python -m training.train --episodes 2000 --checkpoint models/dqn_2048_enhanced.pt
+python -m training.evaluate --checkpoint models/dqn_2048.pt --episodes 100
+```
+
+Fine-tune the separate Dueling DQN from the existing checkpoint (this does not
+write to `models/dqn_2048.pt`):
+
+```bash
+python -m rl.duelingDQN train --pretrained models/dqn_2048.pt --episodes 100
+```
+
+Resume its separately saved checkpoint, evaluate it, or compare both models
+using the same episode seeds:
+
+```bash
+python -m rl.duelingDQN train --resume models/dueling_dqn_2048.pt --episodes 100
+python -m rl.duelingDQN evaluate --checkpoint models/dueling_dqn_2048.pt --episodes 100
+python -m rl.duelingDQN compare --dqn-checkpoint models/dqn_2048.pt --dueling-checkpoint models/dueling_dqn_2048.pt --episodes 100
+```
+
+Dueling checkpoints are stored under `models/dueling_dqn_2048.pt`; Dueling
+training histories, transfer reports, and evaluation results are stored under
+`artifacts/dueling_dqn/`.  The transfer report explicitly records copied and
+newly initialised tensors.  Replay data is absent from the existing DQN
+checkpoint, but is included in new Dueling checkpoints to support resuming.
+
 ## Demo GUI
 
 The pygame GUI is for presentation/demo use only. It renders the project's
