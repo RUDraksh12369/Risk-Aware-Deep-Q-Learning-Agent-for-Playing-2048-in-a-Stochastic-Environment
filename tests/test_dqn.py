@@ -59,6 +59,19 @@ def test_reward_scaling_is_applied_only_to_the_learning_signal():
     assert agent.replay.sample(1).rewards[0] == pytest.approx(1.0)
 
 
+@pytest.mark.parametrize("double_dqn", [True, False], ids=["double", "standard"])
+def test_checkpoint_preserves_dqn_variant(tmp_path, double_dqn):
+    agent = DQNAgent(DQNConfig(
+        hidden_dims=(16,), batch_size=2, min_replay_size=2,
+        double_dqn=double_dqn, seed=8, device="cpu",
+    ))
+    checkpoint = tmp_path / "agent.pt"
+    agent.save(checkpoint)
+    loaded = DQNAgent.load(checkpoint, device="cpu")
+    assert loaded.config.double_dqn is double_dqn
+    np.testing.assert_array_equal(loaded.q_values(np.zeros(16)), agent.q_values(np.zeros(16)))
+
+
 def test_greedy_evaluation_returns_aggregate_metrics():
     agent = DQNAgent(DQNConfig(hidden_dims=(16,), batch_size=2, min_replay_size=2, seed=6, device="cpu"))
     metrics = evaluate(agent, episodes=2, seed=99)

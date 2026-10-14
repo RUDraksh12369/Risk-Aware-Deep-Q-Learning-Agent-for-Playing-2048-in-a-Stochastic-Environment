@@ -33,8 +33,16 @@ def epsilon_by_step(step: int, config: TrainingConfig) -> float:
     return config.epsilon_start + progress * (config.epsilon_end - config.epsilon_start)
 
 
-def train(training: TrainingConfig, dqn: DQNConfig) -> list[dict[str, float]]:
-    """Train for a fixed number of episodes and return per-episode metrics."""
+def train(
+    training: TrainingConfig, dqn: DQNConfig, *, agent: DQNAgent | None = None
+) -> list[dict[str, float]]:
+    """Train a new or supplied agent and return metrics for this run.
+
+    A supplied agent retains its weights, optimizer, replay, and update count.
+    The episode history and exploration schedule start fresh for this run.
+    """
+    if agent is not None and agent.config != dqn:
+        raise ValueError("dqn must match the supplied agent's config.")
     if training.seed is not None:
         random.seed(training.seed)
         np.random.seed(training.seed)
@@ -44,7 +52,8 @@ def train(training: TrainingConfig, dqn: DQNConfig) -> list[dict[str, float]]:
         illegal_move_penalty=training.illegal_move_penalty,
         game_over_penalty=training.game_over_penalty,
     )
-    agent = DQNAgent(dqn)
+    if agent is None:
+        agent = DQNAgent(dqn)
     global_step = 0
     history: list[dict[str, float]] = []
     checkpoint = Path(training.checkpoint_path)
