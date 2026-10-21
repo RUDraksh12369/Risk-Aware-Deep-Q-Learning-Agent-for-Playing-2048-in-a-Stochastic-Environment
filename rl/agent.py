@@ -11,6 +11,7 @@ import numpy as np
 import torch
 from torch import nn
 
+from game.game import Game2048
 from rl.dqn import DQN
 from rl.replay_buffer import ReplayBuffer
 
@@ -80,7 +81,14 @@ class DQNAgent:
         values = self.online_net(tensor).squeeze(0).cpu().numpy()
         return values
 
-    def select_action(self, state: np.ndarray, legal_mask: np.ndarray, epsilon: float = 0.0) -> int:
+    def _policy_q_values(self, state: np.ndarray, game: Optional[Game2048]) -> np.ndarray:
+        """Action values for behaviour; learning uses the networks directly."""
+        return self.q_values(state)
+
+    def select_action(
+        self, state: np.ndarray, legal_mask: np.ndarray, epsilon: float = 0.0,
+        *, game: Optional[Game2048] = None,
+    ) -> int:
         """Choose an epsilon-greedy action, never selecting an illegal move."""
         if not 0.0 <= epsilon <= 1.0:
             raise ValueError("epsilon must be in [0, 1].")
@@ -92,7 +100,7 @@ class DQNAgent:
             raise ValueError("Cannot select an action from an all-false legal mask.")
         if self._rng.random() < epsilon:
             return int(self._rng.choice(legal_actions.tolist()))
-        values = self.q_values(state)
+        values = self._policy_q_values(state, game)
         values[~mask] = -np.inf
         return int(np.argmax(values))
 
@@ -160,11 +168,20 @@ class DQNAgent:
             self.target_net.load_state_dict(self.online_net.state_dict())
         return {"loss": float(loss.item()), "mean_q": float(predicted_q.mean().item()), "grad_norm": float(grad_norm)}
 
+    def _checkpoint_metadata(self) -> dict[str, Any]:
+        """Additional policy settings; baseline checkpoint format stays valid."""
+        return {}
+
+    @classmethod
+    def _from_checkpoint(cls, config: DQNConfig, checkpoint: dict[str, Any]) -> "DQNAgent":
+        return cls(config)
+
     def save(self, path: str | Path, extra: Optional[dict[str, Any]] = None) -> None:
         """Write a portable checkpoint containing model and optimizer state."""
         destination = Path(path)
         destination.parent.mkdir(parents=True, exist_ok=True)
         torch.save({
+            **self._checkpoint_metadata(),
             "config": asdict(self.config),
             "online_net": self.online_net.state_dict(),
             "target_net": self.target_net.state_dict(),
@@ -185,7 +202,17 @@ class DQNAgent:
         saved_config.setdefault("reward_scale", 1.0)
         saved_config.setdefault("target_tau", None)
         saved_config["device"] = str(map_location)
-        agent = cls(DQNConfig(**saved_config))
+        agent_class = cls
+        agent_type = checkpoint.get("agent_type")
+        if agent_type == "ra_d3qn":
+            from rl.risk_aware import RiskAwareDQNAgent
+
+            if cls not in (DQNAgent, RiskAwareDQNAgent):
+                raise ValueError("Use DQNAgent.load or RiskAwareDQNAgent.load for an RA-D3QN checkpoint.")
+            agent_class = RiskAwareDQNAgent
+        elif agent_type is not None:
+            raise ValueError(f"Unknown checkpoint agent_type: {agent_type}")
+        agent = agent_class._from_checkpoint(DQNConfig(**saved_config), checkpoint)
         agent.online_net.load_state_dict(checkpoint["online_net"])
         agent.target_net.load_state_dict(checkpoint.get("target_net", checkpoint["online_net"]))
         if "optimizer" in checkpoint:

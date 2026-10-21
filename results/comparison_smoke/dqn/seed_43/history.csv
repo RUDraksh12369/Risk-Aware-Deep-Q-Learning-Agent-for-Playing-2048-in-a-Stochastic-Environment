@@ -1,0 +1,2 @@
+episode,steps,score,max_tile,reward,epsilon,loss
+1.0,32.0,124.0,16.0,124.0,0.0,0.0011362587734013154

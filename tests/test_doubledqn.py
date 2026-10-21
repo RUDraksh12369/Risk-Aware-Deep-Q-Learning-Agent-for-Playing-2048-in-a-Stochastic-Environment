@@ -142,7 +142,8 @@ def test_shared_training_rejects_mismatched_agent_config(tmp_path):
               DQNConfig(double_dqn=False), agent=agent)
 
 
-def test_double_dqn_cli_trains_from_scratch(tmp_path, monkeypatch):
+@pytest.mark.parametrize("dueling", [True, False])
+def test_double_dqn_cli_trains_from_scratch(tmp_path, monkeypatch, dueling):
     from training import train_doubledqn
 
     checkpoint = tmp_path / "doubledqn.pt"
@@ -155,10 +156,38 @@ def test_double_dqn_cli_trains_from_scratch(tmp_path, monkeypatch):
         "train_doubledqn", "--episodes", "1", "--max-steps-per-episode", "4",
         "--batch-size", "2", "--min-replay-size", "2", "--device", "cpu",
         "--checkpoint", str(checkpoint),
+        "--dueling" if dueling else "--no-dueling",
+        "--learning-rate", "0.001", "--gamma", "0.9",
+        "--replay-capacity", "16", "--target-tau", "0.1",
+        "--epsilon-start", "0", "--epsilon-end", "0",
+        "--epsilon-decay-steps", "10", "--checkpoint-every", "1",
     ])
     train_doubledqn.main()
     loaded = DQNAgent.load(checkpoint, device="cpu")
     assert loaded.config.double_dqn is True
+    assert loaded.config.dueling is dueling
+    assert loaded.config.learning_rate == 0.001
+    assert loaded.config.gamma == 0.9
+    assert loaded.config.replay_capacity == 16
+    assert loaded.config.target_tau == 0.1
     assert loaded.learn_steps == 3
 
 
+@pytest.mark.parametrize("arguments", [
+    ["--batch-size", "0"], ["--min-replay-size", "1"],
+    ["--replay-capacity", "1"], ["--learning-rate", "nan"],
+    ["--gamma", "2"], ["--target-tau", "0"],
+    ["--epsilon-start", "0", "--epsilon-end", "1"],
+    ["--epsilon-decay-steps", "0"], ["--checkpoint-every", "0"],
+])
+def test_double_dqn_cli_rejects_invalid_settings_before_training(monkeypatch, arguments):
+    from training import train_doubledqn
+
+    def forbid_training(*args, **kwargs):
+        pytest.fail("Invalid settings must fail before agent construction.")
+
+    monkeypatch.setattr(train_doubledqn, "DoubleDQNAgent", forbid_training)
+    monkeypatch.setattr("sys.argv", ["train_doubledqn", *arguments])
+    with pytest.raises(SystemExit) as error:
+        train_doubledqn.main()
+    assert error.value.code == 2

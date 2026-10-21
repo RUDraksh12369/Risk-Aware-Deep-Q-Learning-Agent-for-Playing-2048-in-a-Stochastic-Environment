@@ -68,7 +68,7 @@ def train(
             if not legal_mask.any():
                 break
             epsilon = epsilon_by_step(global_step, training)
-            action = agent.select_action(state, legal_mask, epsilon)
+            action = agent.select_action(state, legal_mask, epsilon, game=env.game)
             next_state, reward, done, _ = env.step(action)
             next_mask = np.zeros(env.n_actions, dtype=bool) if done else env.legal_action_mask()
             agent.observe(state, action, reward, next_state, done, next_mask)

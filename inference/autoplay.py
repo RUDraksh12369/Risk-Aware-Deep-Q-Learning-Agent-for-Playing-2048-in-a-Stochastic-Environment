@@ -39,4 +39,4 @@ def choose_action(game: Game2048) -> Action:
     if not legal:
         raise ValueError("DQN cannot choose an action from a terminal board.")
     mask = [action in legal for action in Action]
-    return Action(agent.select_action(encode_board(game.board), mask, epsilon=0.0))
+    return Action(agent.select_action(encode_board(game.board), mask, epsilon=0.0, game=game))
