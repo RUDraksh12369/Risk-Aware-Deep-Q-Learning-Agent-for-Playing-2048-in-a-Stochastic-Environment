@@ -31,7 +31,7 @@ the risk-aware research phase.
 | Analysis tooling | Implemented; substantive results pending | Per-episode evaluation exports, per-seed training curves, evaluation/episode plots, and a descriptive Markdown report. |
 | Training and evaluation | Complete | CLI trainer with epsilon schedule/checkpoints and deterministic greedy batch evaluation. |
 | Inference and GUI | Complete | Checkpoint-loading action callable and Pygame modes for human, random, heuristic, MCTS, and supplied-agent play. |
-| Saved artefacts | Present | A trained checkpoint is included in `models/dqn_2048.pt`; the current checkpoint records 119,106 learning updates. |
+| Saved artefacts | Present | A trained checkpoint is included in `models/dqn_2048.pt`; the merged checkpoint records 1,672,322 learning updates. |
 
 ## How the implemented system works
 
@@ -102,6 +102,15 @@ CPU plain-Double-DQN smoke run completed 32 steps and 29 learning updates,
 reloaded with `double_dqn=True, dueling=False`, and evaluated two episodes
 capped at 32 steps (mean score 152). This is a runtime check, not a performance
 benchmark. The checkpoint was written to a temporary directory.
+
+The merged standalone trainer `rl/duelingDQN.py` uses its own
+`dueling_dqn_v1` checkpoint format. The shared loader now recognizes that
+format, restores dueling heads and the saved input normalization, and supports
+these checkpoints in `training.evaluate` and GUI inference. Use the standalone
+trainer for its replay-based continuation; the shared loader restores model and
+optimizer state, not its saved replay buffer. The included DQN and standalone
+Dueling checkpoints both have Double DQN enabled, so their filenames alone do
+not identify plain-DQN versus Double-DQN experimental baselines.
 
 ### 3a. Risk evaluation foundation
 
