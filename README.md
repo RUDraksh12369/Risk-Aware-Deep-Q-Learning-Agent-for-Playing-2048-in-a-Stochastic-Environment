@@ -57,6 +57,59 @@ training histories, transfer reports, and evaluation results are stored under
 newly initialised tensors.  Replay data is absent from the existing DQN
 checkpoint, but is included in new Dueling checkpoints to support resuming.
 
+## Double Dueling DQN (DDDQN)
+
+`rl/double_dueling_dqn.py` provides the standalone `DoubleDuelingDQNAgent`.
+It requires both dueling heads (`Q = V + A - mean(A)`) and Double DQN targets:
+the online network selects the best legal next action, and the target network
+evaluates that action. Terminal targets equal the reward. It reuses the shared
+environment, log2 state encoding, replay buffer, hyperparameters, training logs,
+and evaluation methodology. No pretrained checkpoint is required.
+
+Run from the project root after setup. On Windows, replace `python` with `py`
+if `python` is not on PATH.
+
+```bash
+# Train from scratch; default output: models/double_dueling_dqn_2048.pt
+python -m rl.double_dueling_dqn train --episodes 2000 --seed 42
+
+# GPU training requires CUDA-capable hardware and a CUDA-enabled PyTorch build
+python -m rl.double_dueling_dqn train --episodes 2000 --device cuda --checkpoint models/double_dueling_dqn_cuda.pt
+
+# Greedy evaluation using the shared evaluator and fixed environment seeds
+python -m rl.double_dueling_dqn evaluate --checkpoint models/double_dueling_dqn_2048.pt --episodes 100 --seed 1000
+
+# Resume to 3000 TOTAL episodes, saving to a NEW output checkpoint
+python -m rl.double_dueling_dqn train --resume models/double_dueling_dqn_2048.pt --checkpoint models/double_dueling_dqn_resumed.pt --episodes 3000
+
+# Short CPU smoke test with learning enabled
+python -m rl.double_dueling_dqn train --episodes 1 --max-steps-per-episode 32 --batch-size 4 --min-replay-size 4 --device cpu --checkpoint models/double_dueling_dqn_smoke.pt
+python -m rl.double_dueling_dqn evaluate --checkpoint models/double_dueling_dqn_smoke.pt --episodes 2 --max-steps-per-episode 128 --device cpu
+```
+
+Training refuses an existing output path, including on resume. Choose a new
+`--checkpoint` path for each invocation. Within a run, the checkpoint is updated
+every 250 episodes by default (`--checkpoint-every` changes this), and at
+completion. Saved state includes online/target networks, optimizer, replay,
+RNG states, episode/global-step counters, training settings, and history with
+score, reward, maximum tile, steps, loss, and epsilon. History is stored inside
+the checkpoint rather than in a separate JSON file.
+
+On resume, saved model/training settings take precedence; the total episode
+target, device, output path, and save interval can change. `--episodes` is the
+total desired count, not additional episodes. Smoke tests use capped episodes
+and do not measure trained gameplay strength.
+
+Evaluation reports score, maximum tile, tile-reaching rates, episode length,
+termination/truncation rates, and board-risk metrics. For a fair comparison,
+use the same evaluation seeds, episode counts, and step limits across models.
+The existing evaluator and GUI loader also accept these checkpoints. To export
+individual evaluation episodes to a new CSV file:
+
+```bash
+python -m training.evaluate --checkpoint models/double_dueling_dqn_2048.pt --episodes 100 --episodes-csv results/double_dueling_dqn_evaluation.csv
+```
+
 ## Demo GUI
 
 The pygame GUI is for presentation/demo use only. It renders the project's

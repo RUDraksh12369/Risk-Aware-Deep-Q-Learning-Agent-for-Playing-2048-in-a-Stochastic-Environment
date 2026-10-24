@@ -56,7 +56,42 @@ Dueling checkpoints are saved to models\dueling_dqn_2048.pt. Its training
 history, transfer report, evaluation metrics, and comparison results are saved
 separately under artifacts\dueling_dqn\.
 
-7. Run the presentation/demo GUI
+7. Train, resume, and evaluate Double Dueling DQN (DDDQN)
+
+Run these commands from the project root after installing dependencies.
+Use py instead of python on Windows if python is not on PATH.
+
+Train from scratch (separate checkpoint; no pretrained model required):
+python -m rl.double_dueling_dqn train --episodes 2000 --seed 42
+
+Train on a CUDA-capable GPU with a CUDA-enabled PyTorch installation:
+python -m rl.double_dueling_dqn train --episodes 2000 --device cuda --checkpoint models/double_dueling_dqn_cuda.pt
+
+Evaluate greedily across 100 fresh games:
+python -m rl.double_dueling_dqn evaluate --checkpoint models/double_dueling_dqn_2048.pt --episodes 100 --seed 1000
+
+Resume to 3000 TOTAL episodes, writing to a NEW checkpoint path:
+python -m rl.double_dueling_dqn train --resume models/double_dueling_dqn_2048.pt --checkpoint models/double_dueling_dqn_resumed.pt --episodes 3000
+
+Short CPU smoke test with learning enabled (not a gameplay benchmark):
+python -m rl.double_dueling_dqn train --episodes 1 --max-steps-per-episode 32 --batch-size 4 --min-replay-size 4 --device cpu --checkpoint models/double_dueling_dqn_smoke.pt
+python -m rl.double_dueling_dqn evaluate --checkpoint models/double_dueling_dqn_smoke.pt --episodes 2 --max-steps-per-episode 128 --device cpu
+
+The default checkpoint is models/double_dueling_dqn_2048.pt. Training refuses
+an existing output path, including on resume; choose a new --checkpoint path
+for each new invocation. During a run it updates its own checkpoint every
+250 episodes by default (change with --checkpoint-every), and at completion.
+Checkpoints include networks, optimizer, replay, RNG state, episode/step
+counters, training settings, and history (score, reward, tile, steps, loss,
+epsilon). Resume restores saved model/training settings; --episodes is the
+total target, not the number of additional episodes. Device, output path,
+and save interval can be changed on resume.
+
+The existing evaluator also supports these checkpoints, including CSV export:
+python -m training.evaluate --checkpoint models/double_dueling_dqn_2048.pt --episodes 100 --episodes-csv results/double_dueling_dqn_evaluation.csv
+Choose a new CSV path if that output already exists.
+
+8. Run the presentation/demo GUI
 
 Human playable mode:
 python -m gui.pygame_demo --mode human
@@ -102,3 +137,5 @@ Autoplay modes:
 - Q or Esc: quit
 
 python -m training.train --episodes 10000 --device cuda         to train on gpu
+
+ python3 -m training.train_doubledqn --no-dueling --episodes 2000 --seed 42 --checkpoint models/doubledqn_2048.pt
