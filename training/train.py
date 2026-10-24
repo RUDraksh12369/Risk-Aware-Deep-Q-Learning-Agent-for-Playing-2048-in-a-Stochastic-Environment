@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import random
-from dataclasses import dataclass
+import os
+import tempfile
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
@@ -34,12 +36,14 @@ def epsilon_by_step(step: int, config: TrainingConfig) -> float:
 
 
 def train(
-    training: TrainingConfig, dqn: DQNConfig, *, agent: DQNAgent | None = None
+    training: TrainingConfig, dqn: DQNConfig, *, agent: DQNAgent | None = None,
+    resume: dict | None = None, resumable: bool = False
 ) -> list[dict[str, float]]:
     """Train a new or supplied agent and return metrics for this run.
 
     A supplied agent retains its weights, optimizer, replay, and update count.
-    The episode history and exploration schedule start fresh for this run.
+    The episode history and exploration schedule start fresh unless resume is
+    provided. Resumable checkpoints capture completed episode boundaries.
     """
     if agent is not None and agent.config != dqn:
         raise ValueError("dqn must match the supplied agent's config.")
@@ -58,7 +62,54 @@ def train(
     history: list[dict[str, float]] = []
     checkpoint = Path(training.checkpoint_path)
 
-    for episode in range(1, training.episodes + 1):
+    start_episode = 0
+    if resume is not None:
+        start_episode = int(resume["episode"])
+        global_step = int(resume["global_step"])
+        history = list(resume["history"])
+        saved = resume.get("training_state")
+        if saved is not None:
+            agent.replay = saved["replay"]
+            agent._rng.setstate(saved["policy_rng"])
+            env.game._rng.setstate(saved["environment_rng"])
+            random.setstate(saved["python_rng"])
+            np.random.set_state(saved["numpy_rng"])
+            torch.set_rng_state(saved["torch_rng"].cpu())
+            if agent.device.type == "cuda" and saved["cuda_rng"] is not None:
+                torch.cuda.set_rng_state_all([state.cpu() for state in saved["cuda_rng"]])
+        if training.episodes <= start_episode:
+            print(f"Checkpoint already completed {start_episode} episodes; nothing to train.")
+            return history
+
+    def save_progress(episode: int) -> None:
+        extra = {"episode": episode, "global_step": global_step, "history": history}
+        if not resumable:
+            agent.save(checkpoint, extra)
+            return
+        extra["training_config"] = asdict(training)
+        extra["training_state"] = {
+            "replay": agent.replay, "policy_rng": agent._rng.getstate(),
+            "environment_rng": env.game._rng.getstate(),
+            "python_rng": random.getstate(), "numpy_rng": np.random.get_state(),
+            "torch_rng": torch.get_rng_state(),
+            "cuda_rng": torch.cuda.get_rng_state_all() if agent.device.type == "cuda" else None,
+        }
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        # Keep the last complete checkpoint intact if writing is interrupted.
+        with tempfile.NamedTemporaryFile(dir=checkpoint.parent, suffix=".pt", delete=False) as file:
+            temporary = Path(file.name)
+        try:
+            agent.save(temporary, extra)
+            with temporary.open("rb") as file:
+                os.fsync(file.fileno())
+            os.replace(temporary, checkpoint)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    if resumable and resume is None:
+        save_progress(0)
+
+    for episode in range(start_episode + 1, training.episodes + 1):
         state = env.reset()
         total_reward = 0.0
         loss_values: list[float] = []
@@ -93,9 +144,9 @@ def train(
             print("episode={episode:.0f} score={score:.0f} max_tile={max_tile:.0f} "
                   "steps={steps:.0f} epsilon={epsilon:.3f} loss={loss:.4f}".format(**record))
         if episode % training.checkpoint_every == 0:
-            agent.save(checkpoint, {"episode": episode, "global_step": global_step, "history": history})
+            save_progress(episode)
 
-    agent.save(checkpoint, {"episode": training.episodes, "global_step": global_step, "history": history})
+    save_progress(training.episodes)
     return history
 
 

@@ -97,15 +97,23 @@ action and the target network evaluates it; terminal states do not bootstrap.
 The original `DQNAgent` and its `double_dqn=False` standard-DQN option remain
 available. Algorithm tests live in `tests/test_doubledqn.py`.
 
-The dedicated trainer initializes fresh weights; it does not load the saved
-DQN checkpoint. Its default output is `models/doubledqn_2048.pt`.
-The existing dueling architecture remains the default; use `--no-dueling` for
-plain Double DQN. Both reuse the same network implementation. Run commands from
-the repository root with the dependencies in `requirements.txt` installed.
-`--help` lists learning-rate, gamma, replay, target-update, exploration, and
-checkpoint-frequency controls. Checkpoints contain model/optimizer state and
-training history; they do not contain replay or RNG state for exact resumption.
-Choose a distinct checkpoint path for each run: training overwrites that path.
+The dedicated trainer starts fresh when its checkpoint does not exist and
+otherwise resumes automatically. It saves after every completed episode by
+default (`--checkpoint-every` changes the interval), using atomic replacement.
+Saved state includes online/target networks, optimizer, replay, training history,
+episode/global-step counters, exploration settings, and RNG states.
+`--episodes` is the total episode target, not additional episodes. Restart the
+same command after interruption; only work since the last saved episode is lost.
+`--fresh` intentionally restarts and overwrites the selected checkpoint.
+`--resume PATH` selects an existing checkpoint and, unless `--checkpoint` is
+specified, continues saving there. Saved model/training settings take precedence;
+you can change the total episode target, device, output path and save interval.
+Legacy checkpoints retain weights/counters but lack replay/RNG and saved schedule:
+they refill replay and use the supplied exploration settings with the saved step.
+CPU continuation is tested against uninterrupted training; identical results
+across devices or library versions are not guaranteed. Checkpoints are larger
+because they include replay. Dueling remains the default; `--no-dueling` selects
+plain Double DQN for a new run. No new dependencies are required.
 
 ```bash
 # Short CPU smoke run with learning enabled

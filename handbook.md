@@ -77,7 +77,7 @@ replay, keeping reported scores in normal 2048 units while improving Q-target
 scale.
 
 `rl/doubledqn.py` exposes a dedicated `DoubleDQNAgent` and the Double DQN
-next-action calculation. `training/train_doubledqn.py` trains it from scratch
+next-action calculation. `training/train_doubledqn.py` starts fresh or resumes its checkpoint
 and defaults to a separate `models/doubledqn_2048.pt` output. Dueling is enabled
 by default, so this is a Dueling Double DQN unless configured otherwise.
 Use `--no-dueling` for plain Double DQN. The dedicated CLI exposes learning
@@ -91,10 +91,19 @@ python3 -m training.train_doubledqn --no-dueling --episodes 2000 --seed 42 --che
 python3 -m training.evaluate --checkpoint models/doubledqn_2048.pt --episodes 100
 ```
 
-Each invocation starts fresh and overwrites its chosen checkpoint path. Saved
-model/optimizer state and history support evaluation; replay and RNG state are
-not saved for exact training resumption. No additional dependencies are needed
-beyond `requirements.txt`.
+Double DQN now automatically resumes an existing output checkpoint. Its default
+save interval is one completed episode; writes replace the previous checkpoint
+atomically. Replay, policy/environment/Python/NumPy/Torch RNG states, history,
+episode/global-step counters and training settings are included alongside model
+and optimizer state. `--episodes` means the total target; rerunning the same
+command continues toward that target. An interrupted partial episode is replayed
+from the last saved boundary, not resumed mid-step. `--fresh` deliberately starts
+over; `--resume PATH` requires that source and also saves there unless another
+output is specified. Saved settings take precedence except for total episodes,
+device, output path and save interval. Legacy checkpoints resume weights and
+counters with a warning: missing replay/RNG cannot be recovered and exploration
+settings come from the CLI. Other trainers retain their existing save behaviour.
+No additional dependencies are needed beyond `requirements.txt`.
 
 Training-readiness verification: 30 dedicated tests passed in 1.78s; the full
 suite passed 144 tests in 30.99s. A fresh
