@@ -122,3 +122,47 @@ def test_interrupted_episode_recovers_last_completed_boundary(tmp_path, monkeypa
     assert [record["episode"] for record in history] == [1, 2]
     assert resumed.learn_steps == 7
     assert len(resumed.replay) == 8
+
+
+@pytest.mark.parametrize("failure", ["sync", "replace"])
+def test_checkpoint_io_failure_preserves_previous_file(tmp_path, monkeypatch, failure):
+    import training.train as training_module
+
+    agent = DoubleDQNAgent(DQNConfig(hidden_dims=(16,), device="cpu"))
+    path = tmp_path / "checkpoint.pt"
+    agent.save(path)
+    before = path.read_bytes()
+
+    def fail(*args):
+        raise OSError("simulated disk or permission failure")
+
+    monkeypatch.setattr(training_module.os, "fsync" if failure == "sync" else "replace", fail)
+    with pytest.raises(OSError, match="disk or permission"):
+        train(TrainingConfig(episodes=1, checkpoint_path=str(path)), agent.config,
+              agent=agent, resumable=True)
+    assert path.read_bytes() == before
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_sync_uses_writable_descriptor_and_final_save_is_not_duplicated(tmp_path, monkeypatch):
+    import os
+    import training.train as training_module
+
+    real_fsync = os.fsync
+    sync_count = 0
+
+    def windows_style_fsync(fd):
+        nonlocal sync_count
+        # A zero-length write fails with EBADF on a read-only descriptor,
+        # without changing any checkpoint bytes.
+        os.write(fd, b"")
+        real_fsync(fd)
+        sync_count += 1
+
+    monkeypatch.setattr(training_module.os, "fsync", windows_style_fsync)
+    agent = DoubleDQNAgent(DQNConfig(hidden_dims=(16,), device="cpu"))
+    path = tmp_path / "checkpoint.pt"
+    train(TrainingConfig(episodes=1, max_steps_per_episode=2, checkpoint_every=1,
+                         checkpoint_path=str(path)), agent.config, agent=agent, resumable=True)
+    assert sync_count == 2  # initial state and completed episode only
+    assert torch.load(path, weights_only=False)["extra"]["episode"] == 1

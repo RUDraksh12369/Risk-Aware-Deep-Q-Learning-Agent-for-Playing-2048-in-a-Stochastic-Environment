@@ -6,6 +6,7 @@ import argparse
 import random
 import os
 import tempfile
+import warnings
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -45,6 +46,8 @@ def train(
     The episode history and exploration schedule start fresh unless resume is
     provided. Resumable checkpoints capture completed episode boundaries.
     """
+    if training.episodes < 1 or training.max_steps_per_episode < 1 or training.checkpoint_every < 1:
+        raise ValueError("episodes, max_steps_per_episode and checkpoint_every must be positive.")
     if agent is not None and agent.config != dqn:
         raise ValueError("dqn must match the supplied agent's config.")
     if training.seed is not None:
@@ -100,11 +103,17 @@ def train(
             temporary = Path(file.name)
         try:
             agent.save(temporary, extra)
-            with temporary.open("rb") as file:
+            # Windows requires a writable descriptor for fsync/_commit.
+            with temporary.open("r+b") as file:
                 os.fsync(file.fileno())
             os.replace(temporary, checkpoint)
         finally:
-            temporary.unlink(missing_ok=True)
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError as error:
+                warnings.warn(f"Could not remove temporary checkpoint {temporary}: {error}",
+                              RuntimeWarning)
+
 
     if resumable and resume is None:
         save_progress(0)
@@ -146,7 +155,8 @@ def train(
         if episode % training.checkpoint_every == 0:
             save_progress(episode)
 
-    save_progress(training.episodes)
+    if training.episodes % training.checkpoint_every != 0:
+        save_progress(training.episodes)
     return history
 
 
