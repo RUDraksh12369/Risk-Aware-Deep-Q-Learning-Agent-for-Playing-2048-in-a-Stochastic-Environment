@@ -100,6 +100,19 @@ target, device, output path, and save interval can change. `--episodes` is the
 total desired count, not additional episodes. Smoke tests use capped episodes
 and do not measure trained gameplay strength.
 
+The DDDQN trainer also accepts `--hidden-dims`, `--max-exponent`,
+`--reward-scale`, `--gradient-clip-norm`, and `--target-update-interval`.
+Use `--hard-target-updates` for periodic target copies; otherwise
+`--target-tau` controls soft updates. These settings apply to new runs; resume
+uses the saved model and exploration settings. Incomplete replay/RNG metadata
+is rejected before continuation. All default hyperparameters are unchanged.
+
+Check DDDQN and its shared dependencies without training or game moves:
+
+```bash
+python -B -m unittest tests.test_double_dqn_validation tests.test_double_dueling_validation -v
+```
+
 Evaluation reports score, maximum tile, tile-reaching rates, episode length,
 termination/truncation rates, and board-risk metrics. For a fair comparison,
 use the same evaluation seeds, episode counts, and step limits across models.
@@ -177,6 +190,22 @@ python -m training.train_doubledqn --no-dueling --episodes 2000 --seed 42 --chec
 
 # Evaluate using the existing evaluator
 python -m training.evaluate --checkpoint models/doubledqn_2048.pt --episodes 100
+```
+
+The Double DQN CLI also exposes `--reward-scale`, `--gradient-clip-norm`,
+`--max-exponent`, and `--hidden-dims`. Use `--hard-target-updates` with
+`--target-update-interval` to select periodic target copies; otherwise
+`--target-tau` controls soft updates. Defaults are unchanged, and saved settings
+still take precedence on resume. Training history additionally records update
+counts, global steps, termination/truncation, Q/target means, absolute TD error,
+and gradient norm. Q/target/loss values use scaled reward units; episode scores
+and rewards remain in raw units. Missing warm-up diagnostics are NaN.
+
+For validation without training, environment moves, backward passes, or
+optimizer updates, run the dedicated standard-library test suite:
+
+```bash
+python -B -m unittest tests.test_double_dqn_validation -v
 ```
 
 ### Risk-aware action evaluation (proposal objective 4)

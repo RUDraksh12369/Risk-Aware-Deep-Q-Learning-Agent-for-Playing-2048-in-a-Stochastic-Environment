@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Optional, Sequence
@@ -13,7 +14,7 @@ from torch import nn
 
 from game.game import Game2048
 from rl.dqn import DQN
-from rl.replay_buffer import ReplayBuffer
+from rl.replay_buffer import ReplayBuffer, TransitionBatch
 
 
 @dataclass
@@ -36,28 +37,34 @@ class DQNConfig:
     device: Optional[str] = None
     max_exponent: float = 16.0
 
+    def validate(self) -> None:
+        if self.seed is not None and (isinstance(self.seed, bool) or not isinstance(self.seed, int) or not 0 <= self.seed < 2**32):
+            raise ValueError("seed must be an integer in [0, 2**32) or None.")
+        for name in ("state_dim", "n_actions", "batch_size", "replay_capacity",
+                     "min_replay_size", "target_update_interval"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive integer.")
+        if not self.hidden_dims or any(isinstance(w, bool) or not isinstance(w, int) or w < 1 for w in self.hidden_dims):
+            raise ValueError("hidden_dims must contain positive integers.")
+        for name in ("learning_rate", "max_exponent", "gradient_clip_norm", "reward_scale"):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be positive and finite.")
+        if not 0 <= self.gamma <= 1:
+            raise ValueError("gamma must be in [0, 1].")
+        if not self.batch_size <= self.min_replay_size <= self.replay_capacity:
+            raise ValueError("require batch_size <= min_replay_size <= replay_capacity.")
+        if self.target_tau is not None and not 0 < self.target_tau <= 1:
+            raise ValueError("target_tau must be in (0, 1] or None.")
+
 
 class DQNAgent:
     """Standard (optionally Double) DQN implementation for :class:`Env2048`."""
 
     def __init__(self, config: Optional[DQNConfig] = None) -> None:
         self.config = config or DQNConfig()
-        if not 0 < self.config.max_exponent < float("inf"):
-            raise ValueError("max_exponent must be positive and finite.")
-        if not 0.0 <= self.config.gamma <= 1.0:
-            raise ValueError("gamma must be in [0, 1].")
-        if self.config.min_replay_size < self.config.batch_size:
-            raise ValueError("min_replay_size must be at least batch_size.")
-        if self.config.replay_capacity < self.config.min_replay_size:
-            raise ValueError("replay_capacity must be at least min_replay_size.")
-        if self.config.target_update_interval < 1:
-            raise ValueError("target_update_interval must be positive.")
-        if self.config.target_tau is not None and not 0.0 < self.config.target_tau <= 1.0:
-            raise ValueError("target_tau must be in (0, 1] or None.")
-        if self.config.gradient_clip_norm <= 0:
-            raise ValueError("gradient_clip_norm must be positive.")
-        if self.config.reward_scale <= 0:
-            raise ValueError("reward_scale must be positive.")
+        self.config.validate()
 
         if self.config.seed is not None:
             random.seed(self.config.seed)
@@ -81,10 +88,16 @@ class DQNAgent:
 
     @torch.inference_mode()
     def q_values(self, state: np.ndarray) -> np.ndarray:
+        self._validate_state(state)
         self.online_net.eval()
         tensor = torch.as_tensor(state, dtype=torch.float32, device=self.device)
         values = self.online_net(tensor).squeeze(0).cpu().numpy()
         return values
+
+    def _validate_state(self, state: np.ndarray) -> None:
+        array = np.asarray(state)
+        if array.shape != (self.config.state_dim,) or not np.isfinite(array).all():
+            raise ValueError(f"state must be finite with shape ({self.config.state_dim},).")
 
     def _policy_q_values(self, state: np.ndarray, game: Optional[Game2048]) -> np.ndarray:
         """Action values for behaviour; learning uses the networks directly."""
@@ -97,6 +110,7 @@ class DQNAgent:
         """Choose an epsilon-greedy action, never selecting an illegal move."""
         if not 0.0 <= epsilon <= 1.0:
             raise ValueError("epsilon must be in [0, 1].")
+        self._validate_state(state)
         mask = np.asarray(legal_mask, dtype=bool)
         if mask.shape != (self.config.n_actions,):
             raise ValueError(f"legal_mask must have shape ({self.config.n_actions},), got {mask.shape}")
@@ -121,15 +135,33 @@ class DQNAgent:
         # Scores in 2048 grow much faster than the bounded board encoding.
         # Scale only the learning signal; public episode metrics stay in raw
         # game-score units for direct comparison.
+        self._validate_state(state)
+        self._validate_state(next_state)
+        if np.asarray(next_legal_mask).shape != (self.config.n_actions,):
+            raise ValueError(f"next_legal_mask must have shape ({self.config.n_actions},).")
         self.replay.add(
             state, action, reward * self.config.reward_scale, next_state, done, next_legal_mask
         )
 
-    def learn(self) -> Optional[dict[str, float]]:
-        """Perform one replay update, or return ``None`` during warm-up."""
-        if len(self.replay) < self.config.min_replay_size:
-            return None
-        batch = self.replay.sample(self.config.batch_size)
+    def compute_td_loss(self, batch: TransitionBatch) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Calculate loss, predictions and detached targets without updating weights.
+
+        A time-limit truncation must retain done=False and its next legal mask;
+        only environment termination suppresses the bootstrap.
+        """
+        count = len(batch.states)
+        expected = {"states": (count, self.config.state_dim),
+                    "next_states": (count, self.config.state_dim),
+                    "actions": (count,), "rewards": (count,), "dones": (count,),
+                    "next_legal_masks": (count, self.config.n_actions)}
+        for name, shape in expected.items():
+            array = np.asarray(getattr(batch, name))
+            if count == 0 or array.shape != shape or not np.isfinite(array).all():
+                raise ValueError(f"batch.{name} must be finite with shape {shape}.")
+        if not np.issubdtype(batch.actions.dtype, np.integer) or np.any(batch.actions < 0) or np.any(batch.actions >= self.config.n_actions):
+            raise ValueError("batch.actions must contain integer action indices.")
+        if not np.isin(batch.dones, [0, 1]).all() or not np.isin(batch.next_legal_masks, [0, 1]).all():
+            raise ValueError("Batch dones and legal masks must be boolean.")
         states = torch.as_tensor(batch.states, dtype=torch.float32, device=self.device)
         actions = torch.as_tensor(batch.actions, dtype=torch.long, device=self.device).unsqueeze(1)
         rewards = torch.as_tensor(batch.rewards, dtype=torch.float32, device=self.device)
@@ -137,7 +169,6 @@ class DQNAgent:
         dones = torch.as_tensor(batch.dones, dtype=torch.float32, device=self.device)
         next_mask = torch.as_tensor(batch.next_legal_masks, dtype=torch.bool, device=self.device)
 
-        self.online_net.train()
         predicted_q = self.online_net(states).gather(1, actions).squeeze(1)
         with torch.no_grad():
             if self.config.double_dqn:
@@ -156,13 +187,28 @@ class DQNAgent:
             next_q = torch.where(can_bootstrap, next_q, torch.zeros_like(next_q))
             targets = rewards + self.config.gamma * (1.0 - dones) * next_q
 
-        loss = self.loss_fn(predicted_q, targets)
+        return self.loss_fn(predicted_q, targets), predicted_q, targets
+
+    def learn(self) -> Optional[dict[str, float]]:
+        """Perform one replay update, or return ``None`` during warm-up."""
+        if len(self.replay) < self.config.min_replay_size:
+            return None
+        self.online_net.train()
+        loss, predicted_q, targets = self.compute_td_loss(self.replay.sample(self.config.batch_size))
         self.optimizer.zero_grad(set_to_none=True)
         loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(self.online_net.parameters(), self.config.gradient_clip_norm)
         self.optimizer.step()
 
         self.learn_steps += 1
+        self.update_target_network()
+        return {"loss": float(loss.item()), "mean_q": float(predicted_q.mean().item()),
+                "grad_norm": float(grad_norm),
+                "mean_target": float(targets.mean().item()),
+                "mean_abs_td_error": float((targets - predicted_q.detach()).abs().mean().item())}
+
+    def update_target_network(self) -> None:
+        """Synchronize after an optimizer update, using the configured strategy."""
         if self.config.target_tau is not None:
             with torch.no_grad():
                 for target_parameter, online_parameter in zip(
@@ -171,7 +217,6 @@ class DQNAgent:
                     target_parameter.lerp_(online_parameter, self.config.target_tau)
         elif self.learn_steps % self.config.target_update_interval == 0:
             self.target_net.load_state_dict(self.online_net.state_dict())
-        return {"loss": float(loss.item()), "mean_q": float(predicted_q.mean().item()), "grad_norm": float(grad_norm)}
 
     def _checkpoint_metadata(self) -> dict[str, Any]:
         """Additional policy settings; baseline checkpoint format stays valid."""

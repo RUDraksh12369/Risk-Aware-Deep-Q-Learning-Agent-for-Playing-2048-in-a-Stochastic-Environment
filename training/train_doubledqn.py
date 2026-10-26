@@ -29,6 +29,13 @@ def main() -> None:
     parser.add_argument("--gamma", type=float, default=DQNConfig.gamma)
     parser.add_argument("--replay-capacity", type=int, default=DQNConfig.replay_capacity)
     parser.add_argument("--target-tau", type=float, default=DQNConfig.target_tau)
+    parser.add_argument("--hard-target-updates", action="store_true",
+                        help="Use periodic copies instead of soft target updates")
+    parser.add_argument("--target-update-interval", type=int, default=DQNConfig.target_update_interval)
+    parser.add_argument("--reward-scale", type=float, default=DQNConfig.reward_scale)
+    parser.add_argument("--gradient-clip-norm", type=float, default=DQNConfig.gradient_clip_norm)
+    parser.add_argument("--max-exponent", type=float, default=DQNConfig.max_exponent)
+    parser.add_argument("--hidden-dims", type=int, nargs="+", default=DQNConfig.hidden_dims)
     parser.add_argument("--epsilon-start", type=float, default=TrainingConfig.epsilon_start)
     parser.add_argument("--epsilon-end", type=float, default=TrainingConfig.epsilon_end)
     parser.add_argument("--epsilon-decay-steps", type=int, default=TrainingConfig.epsilon_decay_steps)
@@ -47,6 +54,20 @@ def main() -> None:
         parser.error("require 0 <= epsilon-end <= epsilon-start <= 1")
     if args.epsilon_decay_steps < 1 or args.checkpoint_every < 1:
         parser.error("epsilon-decay-steps and checkpoint-every must be positive")
+    configured = DQNConfig(
+        batch_size=args.batch_size, min_replay_size=args.min_replay_size,
+        seed=args.seed, device=args.device, dueling=args.dueling,
+        learning_rate=args.learning_rate, gamma=args.gamma,
+        replay_capacity=args.replay_capacity,
+        target_tau=None if args.hard_target_updates else args.target_tau,
+        target_update_interval=args.target_update_interval, reward_scale=args.reward_scale,
+        gradient_clip_norm=args.gradient_clip_norm, max_exponent=args.max_exponent,
+        hidden_dims=tuple(args.hidden_dims),
+    )
+    try:
+        configured.validate()
+    except ValueError as error:
+        parser.error(str(error))
     source = args.resume or args.checkpoint
     if args.fresh and args.resume:
         parser.error("--fresh and --resume cannot be combined")
@@ -75,12 +96,7 @@ def main() -> None:
               "Saved model and available training settings take precedence over CLI settings.")
         train(training, agent.config, agent=agent, resume=extra, resumable=True)
         return
-    agent = DoubleDQNAgent(DQNConfig(
-        batch_size=args.batch_size, min_replay_size=args.min_replay_size,
-        seed=args.seed, device=args.device,
-        dueling=args.dueling, learning_rate=args.learning_rate, gamma=args.gamma,
-        replay_capacity=args.replay_capacity, target_tau=args.target_tau,
-    ))
+    agent = DoubleDQNAgent(configured)
     train(
         TrainingConfig(
             episodes=args.episodes, max_steps_per_episode=args.max_steps_per_episode,

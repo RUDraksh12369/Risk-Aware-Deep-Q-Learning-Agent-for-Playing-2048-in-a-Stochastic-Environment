@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Sequence
+import math
 
 import torch
 from torch import nn
@@ -25,6 +26,8 @@ class DQN(nn.Module):
         dueling: bool = True,
     ) -> None:
         super().__init__()
+        if not math.isfinite(max_exponent) or max_exponent <= 0:
+            raise ValueError("max_exponent must be positive and finite.")
         if state_dim <= 0 or n_actions <= 0:
             raise ValueError("state_dim and n_actions must be positive.")
         if not hidden_dims or any(width <= 0 for width in hidden_dims):

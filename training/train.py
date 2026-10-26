@@ -7,6 +7,7 @@ import random
 import os
 import tempfile
 import warnings
+import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -30,6 +31,18 @@ class TrainingConfig:
     illegal_move_penalty: float = 0.0
     game_over_penalty: float = 0.0
 
+    def validate(self) -> None:
+        if self.seed is not None and (isinstance(self.seed, bool) or not isinstance(self.seed, int) or not 0 <= self.seed < 2**32):
+            raise ValueError("seed must be an integer in [0, 2**32) or None.")
+        for name in ("episodes", "max_steps_per_episode", "epsilon_decay_steps", "checkpoint_every"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive integer.")
+        if not 0 <= self.epsilon_end <= self.epsilon_start <= 1:
+            raise ValueError("require 0 <= epsilon_end <= epsilon_start <= 1.")
+        if not all(math.isfinite(value) for value in (self.illegal_move_penalty, self.game_over_penalty)):
+            raise ValueError("Reward penalties must be finite.")
+
 
 def epsilon_by_step(step: int, config: TrainingConfig) -> float:
     progress = min(step / max(config.epsilon_decay_steps, 1), 1.0)
@@ -46,8 +59,8 @@ def train(
     The episode history and exploration schedule start fresh unless resume is
     provided. Resumable checkpoints capture completed episode boundaries.
     """
-    if training.episodes < 1 or training.max_steps_per_episode < 1 or training.checkpoint_every < 1:
-        raise ValueError("episodes, max_steps_per_episode and checkpoint_every must be positive.")
+    training.validate()
+    dqn.validate()
     if agent is not None and agent.config != dqn:
         raise ValueError("dqn must match the supplied agent's config.")
     if training.seed is not None:
@@ -59,6 +72,8 @@ def train(
         illegal_move_penalty=training.illegal_move_penalty,
         game_over_penalty=training.game_over_penalty,
     )
+    if (dqn.state_dim, dqn.n_actions) != (env.state_dim, env.n_actions):
+        raise ValueError("Agent state/action dimensions must match Env2048.")
     if agent is None:
         agent = DQNAgent(dqn)
     global_step = 0
@@ -122,6 +137,8 @@ def train(
         state = env.reset()
         total_reward = 0.0
         loss_values: list[float] = []
+        diagnostics: dict[str, list[float]] = {}
+        episode_updates = 0
         steps_taken = 0
         for _ in range(training.max_steps_per_episode):
             legal_mask = env.legal_action_mask()
@@ -135,6 +152,10 @@ def train(
             update = agent.learn()
             if update is not None:
                 loss_values.append(update["loss"])
+                episode_updates += 1
+                for key in ("mean_q", "mean_target", "mean_abs_td_error", "grad_norm"):
+                    if key in update:
+                        diagnostics.setdefault(key, []).append(update[key])
             state = next_state
             total_reward += reward
             global_step += 1
@@ -147,6 +168,11 @@ def train(
             "max_tile": float(env.game.max_tile()), "reward": total_reward,
             "epsilon": epsilon_by_step(global_step, training),
             "loss": float(np.mean(loss_values)) if loss_values else float("nan"),
+            "global_step": float(global_step), "learning_updates": float(episode_updates),
+            "terminated": float(env.done or not env.legal_action_mask().any()),
+            "truncated": float(not env.done and env.legal_action_mask().any()),
+            **{key: float(np.mean(diagnostics[key])) if key in diagnostics else float("nan")
+               for key in ("mean_q", "mean_target", "mean_abs_td_error", "grad_norm")},
         }
         history.append(record)
         if episode == 1 or episode % 25 == 0:

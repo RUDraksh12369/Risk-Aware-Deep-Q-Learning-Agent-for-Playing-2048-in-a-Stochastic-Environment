@@ -52,6 +52,19 @@ class ReplayBuffer:
         done: bool,
         next_legal_mask: np.ndarray,
     ) -> None:
+        state_array = np.asarray(state, dtype=np.float32)
+        next_array = np.asarray(next_state, dtype=np.float32)
+        mask_array = np.asarray(next_legal_mask)
+        if state_array.ndim != 1 or state_array.size == 0 or next_array.shape != state_array.shape:
+            raise ValueError("state and next_state must be matching nonempty vectors.")
+        if not np.isfinite(state_array).all() or not np.isfinite(next_array).all() or not np.isfinite(reward):
+            raise ValueError("states and reward must be finite.")
+        if mask_array.ndim != 1 or not mask_array.size or not np.isin(mask_array, [0, 1]).all():
+            raise ValueError("next_legal_mask must be a nonempty boolean vector.")
+        if isinstance(action, (bool, np.bool_)) or not isinstance(action, (int, np.integer)) or not 0 <= action < mask_array.size:
+            raise ValueError("action must be an integer index in the action space.")
+        if done not in (False, True):
+            raise ValueError("done must be boolean.")
         transition = Transition(
             state=np.asarray(state, dtype=np.float32).copy(),
             action=int(action),

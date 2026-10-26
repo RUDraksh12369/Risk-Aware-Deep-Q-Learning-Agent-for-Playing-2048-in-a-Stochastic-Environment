@@ -87,6 +87,14 @@ epsilon). Resume restores saved model/training settings; --episodes is the
 total target, not the number of additional episodes. Device, output path,
 and save interval can be changed on resume.
 
+New-run configuration options include --hidden-dims, --max-exponent,
+--reward-scale, --gradient-clip-norm, --target-update-interval, and
+--hard-target-updates (otherwise --target-tau controls soft updates).
+Resume uses saved model/exploration settings and requires replay/RNG metadata.
+
+Validate without training, game moves, or checkpoint writes:
+python -B -m unittest tests.test_double_dqn_validation tests.test_double_dueling_validation -v
+
 The existing evaluator also supports these checkpoints, including CSV export:
 python -m training.evaluate --checkpoint models/double_dueling_dqn_2048.pt --episodes 100 --episodes-csv results/double_dueling_dqn_evaluation.csv
 Choose a new CSV path if that output already exists.
