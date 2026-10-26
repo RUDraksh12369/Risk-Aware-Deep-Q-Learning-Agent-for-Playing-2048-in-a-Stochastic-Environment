@@ -34,6 +34,7 @@ class DQNConfig:
     dueling: bool = True
     seed: Optional[int] = None
     device: Optional[str] = None
+    max_exponent: float = 16.0
 
 
 class DQNAgent:
@@ -41,6 +42,8 @@ class DQNAgent:
 
     def __init__(self, config: Optional[DQNConfig] = None) -> None:
         self.config = config or DQNConfig()
+        if not 0 < self.config.max_exponent < float("inf"):
+            raise ValueError("max_exponent must be positive and finite.")
         if not 0.0 <= self.config.gamma <= 1.0:
             raise ValueError("gamma must be in [0, 1].")
         if self.config.min_replay_size < self.config.batch_size:
@@ -64,8 +67,10 @@ class DQNAgent:
         requested = self.config.device
         self.device = torch.device(requested or ("cuda" if torch.cuda.is_available() else "cpu"))
         model_args = (self.config.state_dim, self.config.n_actions, self.config.hidden_dims)
-        self.online_net = DQN(*model_args, dueling=self.config.dueling).to(self.device)
-        self.target_net = DQN(*model_args, dueling=self.config.dueling).to(self.device)
+        self.online_net = DQN(*model_args, dueling=self.config.dueling,
+                              max_exponent=self.config.max_exponent).to(self.device)
+        self.target_net = DQN(*model_args, dueling=self.config.dueling,
+                              max_exponent=self.config.max_exponent).to(self.device)
         self.target_net.load_state_dict(self.online_net.state_dict())
         self.target_net.eval()
         self.optimizer = torch.optim.Adam(self.online_net.parameters(), lr=self.config.learning_rate)
@@ -195,6 +200,10 @@ class DQNAgent:
         map_location = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         checkpoint = torch.load(Path(path), map_location=map_location, weights_only=False)
         saved_config = dict(checkpoint["config"])
+        if checkpoint.get("format") == "dueling_dqn_v1":
+            # The standalone trainer always uses dueling heads, but does not
+            # store the shared agent's architecture flag.
+            saved_config["dueling"] = True
         saved_config["hidden_dims"] = tuple(saved_config["hidden_dims"])
         # Checkpoints produced by the original MLP do not have the enhanced
         # fields. Preserve their architecture and reward scale on load.

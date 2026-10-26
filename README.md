@@ -26,6 +26,90 @@ python -m training.train --episodes 2000 --checkpoint models/dqn_2048_enhanced.p
 python -m training.evaluate --checkpoint models/dqn_2048_enhanced.pt --episodes 100
 ```
 
+## Dueling DQN (separate from the original DQN)
+
+The original DQN remains independently runnable with its existing entrypoints:
+
+```bash
+python -m training.train --episodes 2000 --checkpoint models/dqn_2048_enhanced.pt
+python -m training.evaluate --checkpoint models/dqn_2048.pt --episodes 100
+```
+
+Fine-tune the separate Dueling DQN from the existing checkpoint (this does not
+write to `models/dqn_2048.pt`):
+
+```bash
+python -m rl.duelingDQN train --pretrained models/dqn_2048.pt --episodes 100
+```
+
+Resume its separately saved checkpoint, evaluate it, or compare both models
+using the same episode seeds:
+
+```bash
+python -m rl.duelingDQN train --resume models/dueling_dqn_2048.pt --episodes 100
+python -m rl.duelingDQN evaluate --checkpoint models/dueling_dqn_2048.pt --episodes 100
+python -m rl.duelingDQN compare --dqn-checkpoint models/dqn_2048.pt --dueling-checkpoint models/dueling_dqn_2048.pt --episodes 100
+```
+
+Dueling checkpoints are stored under `models/dueling_dqn_2048.pt`; Dueling
+training histories, transfer reports, and evaluation results are stored under
+`artifacts/dueling_dqn/`.  The transfer report explicitly records copied and
+newly initialised tensors.  Replay data is absent from the existing DQN
+checkpoint, but is included in new Dueling checkpoints to support resuming.
+
+## Double Dueling DQN (DDDQN)
+
+`rl/double_dueling_dqn.py` provides the standalone `DoubleDuelingDQNAgent`.
+It requires both dueling heads (`Q = V + A - mean(A)`) and Double DQN targets:
+the online network selects the best legal next action, and the target network
+evaluates that action. Terminal targets equal the reward. It reuses the shared
+environment, log2 state encoding, replay buffer, hyperparameters, training logs,
+and evaluation methodology. No pretrained checkpoint is required.
+
+Run from the project root after setup. On Windows, replace `python` with `py`
+if `python` is not on PATH.
+
+```bash
+# Train from scratch; default output: models/double_dueling_dqn_2048.pt
+python -m rl.double_dueling_dqn train --episodes 2000 --seed 42
+
+# GPU training requires CUDA-capable hardware and a CUDA-enabled PyTorch build
+python -m rl.double_dueling_dqn train --episodes 2000 --device cuda --checkpoint models/double_dueling_dqn_cuda.pt
+
+# Greedy evaluation using the shared evaluator and fixed environment seeds
+python -m rl.double_dueling_dqn evaluate --checkpoint models/double_dueling_dqn_2048.pt --episodes 100 --seed 1000
+
+# Resume to 3000 TOTAL episodes, saving to a NEW output checkpoint
+python -m rl.double_dueling_dqn train --resume models/double_dueling_dqn_2048.pt --checkpoint models/double_dueling_dqn_resumed.pt --episodes 3000
+
+# Short CPU smoke test with learning enabled
+python -m rl.double_dueling_dqn train --episodes 1 --max-steps-per-episode 32 --batch-size 4 --min-replay-size 4 --device cpu --checkpoint models/double_dueling_dqn_smoke.pt
+python -m rl.double_dueling_dqn evaluate --checkpoint models/double_dueling_dqn_smoke.pt --episodes 2 --max-steps-per-episode 128 --device cpu
+```
+
+Training refuses an existing output path, including on resume. Choose a new
+`--checkpoint` path for each invocation. Within a run, the checkpoint is updated
+every 250 episodes by default (`--checkpoint-every` changes this), and at
+completion. Saved state includes online/target networks, optimizer, replay,
+RNG states, episode/global-step counters, training settings, and history with
+score, reward, maximum tile, steps, loss, and epsilon. History is stored inside
+the checkpoint rather than in a separate JSON file.
+
+On resume, saved model/training settings take precedence; the total episode
+target, device, output path, and save interval can change. `--episodes` is the
+total desired count, not additional episodes. Smoke tests use capped episodes
+and do not measure trained gameplay strength.
+
+Evaluation reports score, maximum tile, tile-reaching rates, episode length,
+termination/truncation rates, and board-risk metrics. For a fair comparison,
+use the same evaluation seeds, episode counts, and step limits across models.
+The existing evaluator and GUI loader also accept these checkpoints. To export
+individual evaluation episodes to a new CSV file:
+
+```bash
+python -m training.evaluate --checkpoint models/double_dueling_dqn_2048.pt --episodes 100 --episodes-csv results/double_dueling_dqn_evaluation.csv
+```
+
 ## Demo GUI
 
 The pygame GUI is for presentation/demo use only. It renders the project's
@@ -66,15 +150,23 @@ action and the target network evaluates it; terminal states do not bootstrap.
 The original `DQNAgent` and its `double_dqn=False` standard-DQN option remain
 available. Algorithm tests live in `tests/test_doubledqn.py`.
 
-The dedicated trainer initializes fresh weights; it does not load the saved
-DQN checkpoint. Its default output is `models/doubledqn_2048.pt`.
-The existing dueling architecture remains the default; use `--no-dueling` for
-plain Double DQN. Both reuse the same network implementation. Run commands from
-the repository root with the dependencies in `requirements.txt` installed.
-`--help` lists learning-rate, gamma, replay, target-update, exploration, and
-checkpoint-frequency controls. Checkpoints contain model/optimizer state and
-training history; they do not contain replay or RNG state for exact resumption.
-Choose a distinct checkpoint path for each run: training overwrites that path.
+The dedicated trainer starts fresh when its checkpoint does not exist and
+otherwise resumes automatically. It saves after every completed episode by
+default (`--checkpoint-every` changes the interval), using atomic replacement.
+Saved state includes online/target networks, optimizer, replay, training history,
+episode/global-step counters, exploration settings, and RNG states.
+`--episodes` is the total episode target, not additional episodes. Restart the
+same command after interruption; only work since the last saved episode is lost.
+`--fresh` intentionally restarts and overwrites the selected checkpoint.
+`--resume PATH` selects an existing checkpoint and, unless `--checkpoint` is
+specified, continues saving there. Saved model/training settings take precedence;
+you can change the total episode target, device, output path and save interval.
+Legacy checkpoints retain weights/counters but lack replay/RNG and saved schedule:
+they refill replay and use the supplied exploration settings with the saved step.
+CPU continuation is tested against uninterrupted training; identical results
+across devices or library versions are not guaranteed. Checkpoints are larger
+because they include replay. Dueling remains the default; `--no-dueling` selects
+plain Double DQN for a new run. No new dependencies are required.
 
 ```bash
 # Short CPU smoke run with learning enabled
