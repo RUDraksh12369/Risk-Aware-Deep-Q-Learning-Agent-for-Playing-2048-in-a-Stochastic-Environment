@@ -26,6 +26,35 @@ python -m training.train --episodes 2000 --checkpoint models/dqn_2048_enhanced.p
 python -m training.evaluate --checkpoint models/dqn_2048_enhanced.pt --episodes 100
 ```
 
+## Training
+
+The existing DQN command is the canonical training interface. Every trainer
+accepts the same common arguments: `--episodes`, `--checkpoint`, `--seed`,
+`--device`, `--batch-size`, and `--min-replay-size`.
+
+```bash
+# DQN (canonical)
+python -m training.train --episodes 2000 --checkpoint models/dqn_2048.pt --seed 42
+
+# Double DQN
+python -m training.train_doubledqn --episodes 2000 --checkpoint models/doubledqn_2048.pt --seed 42
+
+# Dueling DQN
+python -m training.train_duelingdqn --episodes 2000 --checkpoint models/dueling_dqn_2048.pt --seed 42
+
+# Double Dueling DQN
+python -m training.train_double_dueling_dqn --episodes 2000 --checkpoint models/double_dueling_dqn_2048.pt --seed 42
+
+# Risk-Aware Dueling Double DQN (RA-D3QN)
+python -m training.train_risk_aware --episodes 2000 --checkpoint models/ra_d3qn_2048.pt --seed 42
+```
+
+The Double DQN and risk-aware trainers retain their optional model-specific
+arguments. The former also retains `--resume`/`--fresh`. Existing
+`python -m rl.duelingDQN train ...` and
+`python -m rl.double_dueling_dqn train ...` commands remain available for
+backward compatibility and their specialized fine-tuning/resume workflows.
+
 ## Dueling DQN (separate from the original DQN)
 
 The original DQN remains independently runnable with its existing entrypoints:

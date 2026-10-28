@@ -29,6 +29,21 @@ python -m game.environment
 Train the enhanced Dueling Double-DQN for a fixed number of episodes:
 python -m training.train --episodes 2000 --checkpoint models\dqn_2048_enhanced.pt
 
+STANDARD TRAINING COMMANDS
+==========================
+
+All models use the DQN argument convention for episodes, checkpoint, seed,
+device, batch size, and replay warm-up size:
+
+python -m training.train --episodes 2000 --checkpoint models/dqn_2048.pt --seed 42
+python -m training.train_doubledqn --episodes 2000 --checkpoint models/doubledqn_2048.pt --seed 42
+python -m training.train_duelingdqn --episodes 2000 --checkpoint models/dueling_dqn_2048.pt --seed 42
+python -m training.train_double_dueling_dqn --episodes 2000 --checkpoint models/double_dueling_dqn_2048.pt --seed 42
+python -m training.train_risk_aware --episodes 2000 --checkpoint models/ra_d3qn_2048.pt --seed 42
+
+The older rl.duelingDQN and rl.double_dueling_dqn subcommands remain supported
+for their specialized fine-tuning, evaluation, and resume workflows.
+
 Evaluate it greedily across 100 fresh games:
 python -m training.evaluate --checkpoint models\dqn_2048_enhanced.pt --episodes 100
 
