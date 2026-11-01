@@ -161,11 +161,19 @@ Thus Q still estimates ordinary score return, not risk-adjusted return. This
 choice isolates the effect of policy adjustment and makes lambda zero an exact
 baseline ablation; it does not establish optimality for a risk objective.
 
-`training/train_risk_aware.py` starts fresh and saves to
-`models/ra_d3qn_2048.pt` by default. Risk coefficient (default 0.1) and component
-weights are saved alongside the existing model/optimizer state. The generic
+`training/train_risk_aware.py` follows the standardized Double DQN trainer
+options and saves to `models/ra_d3qn_2048.pt` by default. It resumes an existing
+RA-D3QN checkpoint automatically; `--fresh` starts over, `--resume PATH`
+selects a source, and `--checkpoint PATH` selects the output. `--episodes` is
+the total episode target. Checkpoints contain model/optimizer, replay,
+training progress, RNG state, and risk settings. The generic
 `DQNAgent.load` restores the risk-aware class when appropriate; old checkpoints
 remain baseline agents. The evaluator and GUI use this same restoration path.
+
+```bash
+python -m training.train_risk_aware --episodes 3000
+python -m training.train_risk_aware --resume models/ra_d3qn_2048.pt --checkpoint models/ra_d3qn_resumed.pt --episodes 3000
+```
 
 ### 4. Running, saving, and evaluating
 

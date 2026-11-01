@@ -181,6 +181,17 @@ def test_evaluation_is_repeatable_and_counts_truncation_separately():
     assert all(np.isfinite(value) for value in metrics.values())
 
 
+def test_evaluation_reports_score_scale_risk_adjusted_reward():
+    baseline = DoubleDQNAgent(small_config())
+    risk_agent = RiskAwareDQNAgent(small_config(), RiskAwareConfig(0.5))
+    risk_agent.online_net.load_state_dict(baseline.online_net.state_dict())
+    ordinary = evaluate(baseline, episodes=2, seed=19, max_steps_per_episode=8)
+    adjusted = evaluate(risk_agent, episodes=2, seed=19, max_steps_per_episode=8)
+    assert ordinary["mean_risk_adjusted_reward"] == ordinary["mean_score"]
+    assert adjusted["mean_score"] == ordinary["mean_score"]
+    assert adjusted["mean_risk_adjusted_reward"] < adjusted["mean_score"]
+
+
 def test_evaluation_counts_terminal_outcome_and_pre_action_risk(monkeypatch):
     from training import evaluate as evaluation_module
 

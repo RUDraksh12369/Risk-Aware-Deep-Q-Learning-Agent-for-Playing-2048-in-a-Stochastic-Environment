@@ -250,8 +250,19 @@ DQN_CHECKPOINT=models/ra_d3qn_2048.pt python3 -m gui.pygame_demo --mode agent --
 `--mobility-weight`, `--crowding-weight`, and `--game-over-weight` set the
 relative risk weights. The default coefficient 0.1 and equal weights are
 provisional, not experimentally validated. Use `--risk-coefficient 0` for
-the no-risk ablation. Training always initializes fresh weights; the default
-output `models/ra_d3qn_2048.pt` is separate from the baseline checkpoint.
+the no-risk ablation. The trainer uses the standardized Double DQN options:
+it resumes an existing RA-D3QN checkpoint by default, `--fresh` starts over,
+and `--resume PATH` selects a source checkpoint. `--checkpoint PATH` selects
+the output path, while `--episodes` is the total episode target. Checkpoints
+include model, optimizer, replay, training progress, RNG state, and risk settings.
+
+```bash
+# Continue the default checkpoint to 3000 total episodes
+python3 -m training.train_risk_aware --episodes 3000
+
+# Resume from a checkpoint into a separate output file
+python3 -m training.train_risk_aware --resume models/ra_d3qn_2048.pt --checkpoint models/ra_d3qn_resumed.pt --episodes 3000
+```
 
 The existing evaluator and GUI loader automatically restore the correct agent
 and saved risk settings. Evaluation now includes reaching 2048, maximum tile,
@@ -261,6 +272,11 @@ weights for comparable measurement across policies. Low mobility means at
 most one legal move; high risk uses `--high-risk-threshold` (default 0.5).
 Game-over excludes step-limit truncation. Without a step limit, completed 2048
 episodes naturally have game-over rate 1; that alone cannot measure robustness.
+Evaluation also reports mean risk-adjusted reward: raw score minus saved lambda
+times the sum of chosen-action risk scores, converted to raw-score units using
+the checkpoint reward scale. Baselines have lambda zero, so their risk-adjusted
+reward equals score. This is descriptive policy performance, not the training
+return or a calibrated probability of failure.
 
 Run the integration tests with `python3 -m pytest tests/test_risk_aware.py -q`.
 Multi-seed training, comparisons with all proposed baselines, and lambda/weight
