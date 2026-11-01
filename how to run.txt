@@ -24,36 +24,56 @@ pytest -q
 python -m game.game
 python -m game.environment
 
-5. Train and evaluate the DQN agent
+5. Train and evaluate the plain DQN baseline
 
-Train the enhanced Dueling Double-DQN for a fixed number of episodes:
-python -m training.train --episodes 2000 --checkpoint models\dqn_2048_enhanced.pt
+Train plain DQN for a fixed number of episodes:
+python -m training.train --episodes 2000 --seed 42 --checkpoint models\dqn_baseline_2048.pt
 
 STANDARD TRAINING COMMANDS
 ==========================
 
-All models use the DQN argument convention for episodes, checkpoint, seed,
-device, batch size, and replay warm-up size:
+All five models use the same validated training arguments, checkpoint lifecycle,
+and total-episode resume semantics. Common arguments include --episodes,
+--checkpoint, --seed, --device, --batch-size, --min-replay-size,
+--replay-capacity, --learning-rate, --gamma, --target-tau,
+--target-update-interval, --epsilon-start, --epsilon-end,
+--epsilon-decay-steps, --max-steps-per-episode, and --checkpoint-every.
+`--target-tau none` or --hard-target-updates selects periodic hard target copies;
+otherwise the default is soft updates with tau 0.005. Shared network options also
+include --reward-scale, --gradient-clip-norm, --max-exponent, and --hidden-dims.
+RA-D3QN additionally accepts --risk-coefficient, --mobility-weight,
+--crowding-weight, and --game-over-weight.
 
-python -m training.train --episodes 2000 --checkpoint models/dqn_2048.pt --seed 42
+Existing output checkpoints resume automatically. Use --fresh to restart, or
+--resume PATH to choose a source checkpoint. --episodes is the total target.
+Saved model/training settings take precedence; the CLI uses supplied total target,
+device, output path, and save interval. Checkpoints retain model/target weights,
+optimizer, replay, training progress, RNG state, and (for RA-D3QN) risk settings.
+The separate default outputs are models\dqn_baseline_2048.pt,
+models\doubledqn_2048.pt, models\dueling_dqn_shared.pt,
+models\dueling_double_dqn_2048.pt, and models\ra_d3qn_2048.pt.
+
+python -m training.train --episodes 2000 --checkpoint models/dqn_baseline_2048.pt --seed 42
 python -m training.train_doubledqn --episodes 2000 --checkpoint models/doubledqn_2048.pt --seed 42
-python -m training.train_duelingdqn --episodes 2000 --checkpoint models/dueling_dqn_2048.pt --seed 42
-python -m training.train_double_dueling_dqn --episodes 2000 --checkpoint models/double_dueling_dqn_2048.pt --seed 42
-python -m training.train_risk_aware --episodes 2000 --checkpoint models/ra_d3qn_2048.pt --seed 42
+python -m training.train_duelingdqn --episodes 2000 --seed 42
+python -m training.train_double_dueling_dqn --episodes 2000 --seed 42
+python -m training.train_risk_aware --episodes 2000 --seed 42 --risk-coefficient 0.1
 
 The older rl.duelingDQN and rl.double_dueling_dqn subcommands remain supported
 for their specialized fine-tuning, evaluation, and resume workflows.
 
 Evaluate it greedily across 100 fresh games:
-python -m training.evaluate --checkpoint models\dqn_2048_enhanced.pt --episodes 100
+python -m training.evaluate --checkpoint models\dqn_baseline_2048.pt --episodes 100
 
 The trainer saves intermediate checkpoints every 250 episodes. The enhanced
 checkpoint is preferred automatically by the GUI when it exists.
 
 6. Fine-tune, resume, and evaluate the separate Dueling DQN
 
-These commands use rl\duelingDQN.py and never overwrite the original DQN
-checkpoint, logs, or results.
+These are the legacy transfer-learning commands in rl\duelingDQN.py and never
+overwrite the original DQN checkpoint, logs, or results. Their resume episode
+count is additional episodes; use training.train_duelingdqn for the shared
+total-target behavior.
 
 Fine-tune Dueling DQN from the pretrained original checkpoint:
 python -m rl.duelingDQN train --pretrained models\dqn_2048.pt --episodes 100
@@ -71,8 +91,10 @@ Dueling checkpoints are saved to models\dueling_dqn_2048.pt. Its training
 history, transfer report, evaluation metrics, and comparison results are saved
 separately under artifacts\dueling_dqn\.
 
-7. Train, resume, and evaluate Double Dueling DQN (DDDQN)
+7. Legacy Double Dueling DQN (DDDQN) commands
 
+For the common five-model interface, use training.train_double_dueling_dqn
+from section 5. The subcommand below remains available for compatibility.
 Run these commands from the project root after installing dependencies.
 Use py instead of python on Windows if python is not on PATH.
 
@@ -134,13 +156,10 @@ python -m training.train_risk_aware --episodes 3000
 Explicitly select a source checkpoint and save the resumed model to a new path:
 python -m training.train_risk_aware --resume models\ra_d3qn_2048.pt --checkpoint models\ra_d3qn_resumed.pt --episodes 3000
 
-The RA-D3QN trainer uses the same learning-rate, gamma, batch-size, replay,
-epsilon, seed, device, and checkpoint interval conventions as the Double DQN
-trainer. For example, add --learning-rate 0.0003 --gamma 0.995
---replay-capacity 100000 --checkpoint-every 250 to configure them. Risk
-parameters include --risk-coefficient, --mobility-weight, --crowding-weight,
-and --game-over-weight. Checkpoints retain model and optimizer state, replay,
-training progress, random-number-generator state, and risk settings.
+The RA-D3QN trainer follows the same common argument and resume behavior as
+the other four models. Its risk-specific options are --risk-coefficient,
+--mobility-weight, --crowding-weight, and --game-over-weight. Resume restores
+model, optimizer, replay, progress, RNG state, and saved risk settings.
 Evaluation reports score, tile, episode length, termination/truncation, board
 risk, and risk-adjusted reward. Risk-adjusted reward is a descriptive metric;
 long multi-seed training and comparisons are still needed to establish model
@@ -196,6 +215,4 @@ Autoplay modes:
 - Use the sidebar buttons/slider, or +/- keys, to adjust speed
 - Q or Esc: quit
 
-python -m training.train --episodes 10000 --device cuda         to train on gpu
-
- python3 -m training.train_doubledqn --no-dueling --episodes 2000 --seed 42 --checkpoint models/doubledqn_2048.pt
+python -m training.train --episodes 10000 --device cuda --seed 42 --checkpoint models\dqn_baseline_2048.pt

@@ -71,7 +71,9 @@ class DuelingDQN(nn.Module):
         features = self.feature_extractor(states.float() / self.max_exponent)
         value = self.value_stream(features)
         advantage = self.advantage_stream(features)
-        return value + (advantage - advantage.mean(dim=1, keepdim=True))
+        # Keep operation grouping identical to rl.dqn.DQN so a checkpoint
+        # restored by the shared loader produces bitwise-identical Q values.
+        return value + advantage - advantage.mean(dim=1, keepdim=True)
 
 
 def _checkpoint(path: str | Path, device: torch.device) -> dict[str, Any]:

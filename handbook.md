@@ -24,7 +24,7 @@ the risk-aware research phase.
 | RL environment | Complete | Gym-like `reset`/`step`, log2 state encoding, rewards, legal-action masks, and non-mutating afterstate simulation. |
 | Tests | Implemented features covered | Game rules, environment behaviour, MCTS, replay, DQN/Double DQN targets, checkpoint compatibility, and risk scoring have dedicated tests. See verification below for run results. |
 | MCTS baseline/demo | Complete | Stochastic rollouts, UCB action selection, simulated tile spawns, and board heuristics. |
-| DQN baseline | Complete | Dueling MLP, Double-DQN targets, replay buffer, target network, reward scaling, gradient clipping, checkpoint save/load, and legal-action masking. |
+| Five-model training suite | Complete | Shared CLI defaults, learning loop, checkpoint lifecycle, and explicit model flags for DQN, Double DQN, Dueling DQN, Dueling Double DQN, and RA-D3QN. |
 | Risk evaluation | Implemented; experimental design unvalidated | Configurable mobility, crowding, and immediate spawn-danger score; action-specific afterstates; masked Q-minus-risk utility. |
 | RA-D3QN integration | Implemented; performance unvalidated | Risk-aware behaviour policy, unchanged Double DQN targets, separate trainer, saved risk settings, and automatic policy restoration. |
 | Comparison runner | Implemented; full experiments pending | Explicit baseline flags, random/greedy references, paired evaluation seed ranges, isolated checkpoints/histories, manifests and CSV summaries. |
@@ -58,54 +58,58 @@ Rollouts prefer immediate gains, empty cells, corner placement of the maximum
 tile, and monotonic rows/columns. It is a useful playable baseline, but it is
 not a risk-aware algorithm or an optimal 2048 solver.
 
-### 3. DQN baseline
+### 3. Shared DQN model family
 
 The learning agent is split into three parts:
 
 - `rl/dqn.py` defines a 16-input, two-hidden-layer (256/256) MLP. It
-  normalises the log2 encoding and uses a dueling value/advantage head.
+  normalises the log2 encoding and can use a dueling value/advantage head.
 - `rl/replay_buffer.py` stores fixed-capacity transitions and samples random
   mini-batches to decorrelate updates.
 - `rl/agent.py` performs epsilon-greedy action selection, never chooses a
   masked/illegal move, trains with Smooth L1 loss, clips gradients, and keeps a
   softly updated target network.
 
-The update is Double DQN: the online network chooses the next legal action and
-the target network evaluates it. Terminal or no-legal-action transitions do
-not bootstrap. Raw game rewards are multiplied by `0.01` only when written to
+The shared learning loop supports standard DQN targets, Double DQN targets,
+and optional dueling heads. Terminal or no-legal-action transitions do not
+bootstrap. Raw game rewards are multiplied by `0.01` only when written to
 replay, keeping reported scores in normal 2048 units while improving Q-target
-scale.
+scale. The five standardized commands choose these flags explicitly, so the
+plain DQN entrypoint is not silently a Dueling Double DQN.
 
-`rl/doubledqn.py` exposes a dedicated `DoubleDQNAgent` and the Double DQN
-next-action calculation. `training/train_doubledqn.py` starts fresh or resumes its checkpoint
-and defaults to a separate `models/doubledqn_2048.pt` output. Dueling is enabled
-by default, so this is a Dueling Double DQN unless configured otherwise.
-Use `--no-dueling` for plain Double DQN. The dedicated CLI exposes learning
-rate, gamma, replay capacity, soft target tau, epsilon schedule, and checkpoint
-frequency, and rejects invalid settings before constructing the agent.
+`rl/doubledqn.py` exposes `DoubleDQNAgent` and the Double DQN next-action
+calculation. The online network chooses the best legal next action; the target
+network evaluates it. The standardized Double DQN command defaults to plain
+Double DQN; `--dueling` remains available as an ablation.
 
-Training-ready command (from the repository root):
+The standardized training commands (from the repository root) are:
 
 ```bash
-python3 -m training.train_doubledqn --no-dueling --episodes 2000 --seed 42 --checkpoint models/doubledqn_2048.pt
-python3 -m training.evaluate --checkpoint models/doubledqn_2048.pt --episodes 100
+python -m training.train --episodes 2000 --seed 42 --checkpoint models/dqn_baseline_2048.pt
+python -m training.train_doubledqn --episodes 2000 --seed 42
+python -m training.train_duelingdqn --episodes 2000 --seed 42
+python -m training.train_double_dueling_dqn --episodes 2000 --seed 42
+python -m training.train_risk_aware --episodes 2000 --seed 42 --risk-coefficient 0.1
 ```
 
-Double DQN now automatically resumes an existing output checkpoint. Its default
-save interval is one completed episode; writes replace the previous checkpoint
-atomically. Replay, policy/environment/Python/NumPy/Torch RNG states, history,
-episode/global-step counters and training settings are included alongside model
-and optimizer state. `--episodes` means the total target; rerunning the same
-command continues toward that target. An interrupted partial episode is replayed
-from the last saved boundary, not resumed mid-step. `--fresh` deliberately starts
-over; `--resume PATH` requires that source and also saves there unless another
-output is specified. Saved settings take precedence except for total episodes,
-device, output path and save interval. Legacy checkpoints resume weights and
-counters with a warning: missing replay/RNG cannot be recovered and exploration
-settings come from the CLI. Other trainers retain their existing save behaviour.
+All five accept the same common learning, target-update, epsilon, episode-limit,
+seed, device, checkpoint, and resume options. `--target-tau none` selects hard
+target updates controlled by `--target-update-interval`; the default is soft
+update tau 0.005. `--hard-target-updates` is an equivalent switch. The common
+CLI also exposes `--reward-scale`, `--gradient-clip-norm`, `--max-exponent`,
+and `--hidden-dims`. Existing output checkpoints resume automatically; `--fresh`
+reinitializes weights, while `--resume PATH` selects a source and defaults the
+output to that source. `--episodes` is the total target. Saved model and training
+settings take precedence; CLI episode target, device, output path, and checkpoint
+interval remain configurable. New resumable checkpoints atomically save online
+and target networks, optimizer, replay, RNG states, episode/global-step counters,
+training settings, and history. Partial episodes restart from the last completed
+episode boundary. Legacy checkpoints without replay/RNG state resume with a
+warning. RA-D3QN additionally saves and restores its risk coefficient and weights.
 No additional dependencies are needed beyond `requirements.txt`.
 
-Training-readiness verification: 30 dedicated tests passed in 1.78s; the full
+Historical training-readiness verification (from an earlier repository
+snapshot; not the current test result): 30 dedicated tests passed in 1.78s; the full
 suite passed 144 tests in 30.99s. A fresh
 CPU plain-Double-DQN smoke run completed 32 steps and 29 learning updates,
 reloaded with `double_dqn=True, dueling=False`, and evaluated two episodes
@@ -119,7 +123,9 @@ these checkpoints in `training.evaluate` and GUI inference. Use the standalone
 trainer for its replay-based continuation; the shared loader restores model and
 optimizer state, not its saved replay buffer. The included DQN and standalone
 Dueling checkpoints both have Double DQN enabled, so their filenames alone do
-not identify plain-DQN versus Double-DQN experimental baselines.
+not identify plain-DQN versus Double-DQN experimental baselines. They predate
+the standardized five-variant trainer commands; use saved config flags or train
+new baselines through the dedicated entrypoints above.
 
 ### 3a. Risk evaluation foundation
 
@@ -161,25 +167,19 @@ Thus Q still estimates ordinary score return, not risk-adjusted return. This
 choice isolates the effect of policy adjustment and makes lambda zero an exact
 baseline ablation; it does not establish optimality for a risk objective.
 
-`training/train_risk_aware.py` follows the standardized Double DQN trainer
-options and saves to `models/ra_d3qn_2048.pt` by default. It resumes an existing
-RA-D3QN checkpoint automatically; `--fresh` starts over, `--resume PATH`
-selects a source, and `--checkpoint PATH` selects the output. `--episodes` is
-the total episode target. Checkpoints contain model/optimizer, replay,
-training progress, RNG state, and risk settings. The generic
-`DQNAgent.load` restores the risk-aware class when appropriate; old checkpoints
-remain baseline agents. The evaluator and GUI use this same restoration path.
-
-```bash
-python -m training.train_risk_aware --episodes 3000
-python -m training.train_risk_aware --resume models/ra_d3qn_2048.pt --checkpoint models/ra_d3qn_resumed.pt --episodes 3000
-```
+`training/train_risk_aware.py` uses the shared five-variant CLI and saves to
+`models/ra_d3qn_2048.pt` by default. Existing RA-D3QN checkpoints resume
+automatically; `--fresh` starts over, `--resume PATH` selects a source, and
+`--checkpoint PATH` selects the output. `--episodes` is the total target.
+Checkpoints save model/optimizer, replay, training progress, RNG state, and risk
+settings. The generic `DQNAgent.load` restores the risk-aware class; evaluation
+and GUI inference use the same restoration path.
 
 ### 4. Running, saving, and evaluating
 
-`training/train.py` creates an environment and agent, linearly decays epsilon
-from 1.0 to 0.05 over 300,000 steps, records per-episode score/tile/loss data,
-and saves checkpoints every 250 episodes plus at the end. Defaults include a
+`training/train.py` is the plain DQN entrypoint and uses the shared trainer. It
+linearly decays epsilon from 1.0 to 0.05 over 300,000 steps, records per-episode
+score/tile/loss data, and saves checkpoints every 250 episodes plus at the end. Defaults include a
 2,000-transition warm-up, batch size 128, gamma 0.995, and soft target update
 tau 0.005.
 
@@ -245,7 +245,11 @@ flags partial comparisons, truncated games, unavailable legacy episode exports,
 and single-run standard deviation. It does not declare significance or rank
 trained agents automatically. Source data and checkpoints are not modified.
 
-## Verification completed
+## Historical verification records (not current test results)
+
+The records below document earlier repository snapshots and are retained for
+context only. Use the current stabilization result at the end of this section
+for the latest test status.
 
 After adding the comparison runner, `python3 -m pytest -q` passed **124 tests**
 (3.10 seconds), including **24 comparison cases**. A temporary CPU CLI smoke
@@ -294,6 +298,19 @@ reliable benchmark.
 - These runs use one training episode and a 32-step evaluation cap; they verify
   the pipeline and do not establish comparative performance or convergence.
 
+## Current stabilization verification (2026-11-01)
+
+- Full test suite: `python -m pytest -q` — **180 passed, 63 subtests in 13.00s**.
+- CLI defaults and checkpoint round-trip tests cover all five standardized
+  model commands. Each was smoke-trained on CPU for one 4-step episode, then
+  resumed to a total target of two episodes; model flags and RA-D3QN risk
+  settings were checked in saved checkpoints.
+- The Dueling checkpoint compatibility test now verifies identical inference
+  results after shared-loader restoration; the network expressions use matching
+  operation grouping.
+- Smoke tests validate wiring and resumption only. They do not measure trained
+  playing strength or replace longer multi-seed experiments.
+
 ## Remaining work
 
 The following research milestones remain before the repository matches its
@@ -326,8 +343,14 @@ python -m training.compare --smoke --seeds 42 43 --output-dir results/comparison
 # Plot saved results without any further training (analysis directory must be new)
 python -m training.analyze --input-dir results/comparison_smoke --smoothing-window 25
 
-# Train a baseline checkpoint
-python -m training.train --episodes 2000 --checkpoint models/dqn_2048_enhanced.pt
+# Train the plain DQN baseline
+python -m training.train --episodes 2000 --seed 42 --checkpoint models/dqn_baseline_2048.pt
+
+# Train the other research variants with the same shared CLI options
+python -m training.train_doubledqn --episodes 2000 --seed 42
+python -m training.train_duelingdqn --episodes 2000 --seed 42
+python -m training.train_double_dueling_dqn --episodes 2000 --seed 42
+python -m training.train_risk_aware --episodes 2000 --seed 42 --risk-coefficient 0.1
 
 # Short RA-D3QN smoke run with risk-aware exploitation enabled
 python -m training.train_risk_aware --episodes 1 --max-steps-per-episode 32 --batch-size 4 --min-replay-size 4 --epsilon-start 0 --epsilon-end 0 --risk-coefficient 0.1 --device cpu --checkpoint models/ra_d3qn_smoke.pt
@@ -336,7 +359,7 @@ python -m training.train_risk_aware --episodes 1 --max-steps-per-episode 32 --ba
 python -m training.evaluate --checkpoint models/ra_d3qn_smoke.pt --episodes 2 --max-steps-per-episode 128 --device cpu
 
 # Evaluate a trained checkpoint
-python -m training.evaluate --checkpoint models/dqn_2048_enhanced.pt --episodes 100
+python -m training.evaluate --checkpoint models/dqn_baseline_2048.pt --episodes 100
 
 # Demo the agent or MCTS
 python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action

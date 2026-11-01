@@ -22,45 +22,56 @@ PYTHONPATH=. python3 tests/test_game.py
 ```bash
 python -m game.game          # pure mechanics demo (a few scripted moves)
 python -m game.environment   # RL-wrapper demo (one full random episode)
-python -m training.train --episodes 2000 --checkpoint models/dqn_2048_enhanced.pt
-python -m training.evaluate --checkpoint models/dqn_2048_enhanced.pt --episodes 100
+python -m training.train --episodes 2000 --seed 42 --checkpoint models/dqn_baseline_2048.pt
+python -m training.evaluate --checkpoint models/dqn_baseline_2048.pt --episodes 100
 ```
 
-## Training
+## Standardized model training
 
-The existing DQN command is the canonical training interface. Every trainer
-accepts the same common arguments: `--episodes`, `--checkpoint`, `--seed`,
-`--device`, `--batch-size`, and `--min-replay-size`.
+The five model variants share one CLI, validation rules, checkpoint lifecycle,
+and total-episode resume semantics:
 
 ```bash
-# DQN (canonical)
-python -m training.train --episodes 2000 --checkpoint models/dqn_2048.pt --seed 42
-
-# Double DQN
-python -m training.train_doubledqn --episodes 2000 --checkpoint models/doubledqn_2048.pt --seed 42
-
-# Dueling DQN
-python -m training.train_duelingdqn --episodes 2000 --checkpoint models/dueling_dqn_2048.pt --seed 42
-
-# Double Dueling DQN
-python -m training.train_double_dueling_dqn --episodes 2000 --checkpoint models/double_dueling_dqn_2048.pt --seed 42
-
-# Risk-Aware Dueling Double DQN (RA-D3QN)
-python -m training.train_risk_aware --episodes 2000 --checkpoint models/ra_d3qn_2048.pt --seed 42
+python -m training.train --episodes 2000 --seed 42 --checkpoint models/dqn_baseline_2048.pt
+python -m training.train_doubledqn --episodes 2000 --seed 42
+python -m training.train_duelingdqn --episodes 2000 --seed 42
+python -m training.train_double_dueling_dqn --episodes 2000 --seed 42
+python -m training.train_risk_aware --episodes 2000 --seed 42 --risk-coefficient 0.1
 ```
 
-The Double DQN and risk-aware trainers retain their optional model-specific
-arguments. The former also retains `--resume`/`--fresh`. Existing
-`python -m rl.duelingDQN train ...` and
-`python -m rl.double_dueling_dqn train ...` commands remain available for
-backward compatibility and their specialized fine-tuning/resume workflows.
+All accept `--episodes`, `--checkpoint`, `--seed`, `--device`, `--batch-size`,
+`--min-replay-size`, `--replay-capacity`, `--learning-rate`, `--gamma`,
+`--target-tau`, `--target-update-interval`, `--epsilon-start`, `--epsilon-end`,
+`--epsilon-decay-steps`, `--max-steps-per-episode`, and `--checkpoint-every`.
+`--target-tau none` or `--hard-target-updates` enables hard target updates at
+`--target-update-interval`; otherwise tau 0.005 is the default. Shared optional
+network settings are `--reward-scale`, `--gradient-clip-norm`, `--max-exponent`,
+and `--hidden-dims`. RA-D3QN also accepts `--risk-coefficient`,
+`--mobility-weight`, `--crowding-weight`, and `--game-over-weight`.
+
+Each model has a separate default checkpoint under `models/`:
+`dqn_baseline_2048.pt`, `doubledqn_2048.pt`, `dueling_dqn_shared.pt`,
+`dueling_double_dqn_2048.pt`, and `ra_d3qn_2048.pt`. Existing output checkpoints
+resume automatically; `--fresh` explicitly restarts, while `--resume PATH`
+selects a source checkpoint and saves there unless `--checkpoint` specifies a
+new output. `--episodes` is the total episode target. Saved model and training
+settings take precedence on resume; the trainer prints this, while episode
+target, device, output path, and checkpoint interval use the CLI values.
+Checkpoint state includes online/target weights, optimizer, replay, training
+progress, and RNG state. RA-D3QN also retains risk settings.
+
+Use the shared seeded evaluator for any checkpoint, for example:
+
+```bash
+python -m training.evaluate --checkpoint models/ra_d3qn_2048.pt --episodes 100 --seed 1000
+```
 
 ## Dueling DQN (separate from the original DQN)
 
-The original DQN remains independently runnable with its existing entrypoints:
+Previously bundled DQN checkpoints remain compatible with the shared
+inference and evaluation loaders. For example:
 
 ```bash
-python -m training.train --episodes 2000 --checkpoint models/dqn_2048_enhanced.pt
 python -m training.evaluate --checkpoint models/dqn_2048.pt --episodes 100
 ```
 
@@ -89,6 +100,8 @@ checkpoint, but is included in new Dueling checkpoints to support resuming.
 ## Double Dueling DQN (DDDQN)
 
 `rl/double_dueling_dqn.py` provides the standalone `DoubleDuelingDQNAgent`.
+For the common five-model CLI, train with `python -m training.train_double_dueling_dqn`; the `rl.double_dueling_dqn` subcommand below remains available as a legacy entrypoint.
+
 It requires both dueling heads (`Q = V + A - mean(A)`) and Double DQN targets:
 the online network selects the best legal next action, and the target network
 evaluates that action. Terminal targets equal the reward. It reuses the shared
@@ -193,13 +206,13 @@ The original `DQNAgent` and its `double_dqn=False` standard-DQN option remain
 available. Algorithm tests live in `tests/test_doubledqn.py`.
 
 The dedicated trainer starts fresh when its checkpoint does not exist and
-otherwise resumes automatically. It saves after every completed episode by
-default (`--checkpoint-every` changes the interval), using atomic replacement.
+otherwise resumes automatically. Its shared default save interval is 250
+episodes (`--checkpoint-every` changes the interval), using atomic replacement.
 Saved state includes online/target networks, optimizer, replay, training history,
 episode/global-step counters, exploration settings, and RNG states.
 `--episodes` is the total episode target, not additional episodes. Restart the
 same command after interruption; only work since the last saved episode is lost.
-`--fresh` intentionally restarts and overwrites the selected checkpoint.
+`--fresh` intentionally restarts and replaces the selected checkpoint.
 `--resume PATH` selects an existing checkpoint and, unless `--checkpoint` is
 specified, continues saving there. Saved model/training settings take precedence;
 you can change the total episode target, device, output path and save interval.
@@ -207,8 +220,8 @@ Legacy checkpoints retain weights/counters but lack replay/RNG and saved schedul
 they refill replay and use the supplied exploration settings with the saved step.
 CPU continuation is tested against uninterrupted training; identical results
 across devices or library versions are not guaranteed. Checkpoints are larger
-because they include replay. Dueling remains the default; `--no-dueling` selects
-plain Double DQN for a new run. No new dependencies are required.
+because they include replay. Plain Double DQN is the default; `--dueling` selects
+the Dueling Double DQN ablation. No new dependencies are required.
 
 ```bash
 # Short CPU smoke run with learning enabled

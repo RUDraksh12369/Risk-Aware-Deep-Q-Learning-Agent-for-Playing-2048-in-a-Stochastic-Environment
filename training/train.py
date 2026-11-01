@@ -1,8 +1,7 @@
-"""Command-line trainer for the standard masked Double-DQN 2048 baseline."""
+"""Command-line trainer for the standardized plain-DQN 2048 baseline."""
 
 from __future__ import annotations
 
-import argparse
 import random
 import os
 import tempfile
@@ -187,18 +186,9 @@ def train(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--episodes", type=int, default=TrainingConfig.episodes)
-    parser.add_argument("--checkpoint", default=TrainingConfig.checkpoint_path)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", default=None, help="e.g. cpu, cuda, or cuda:0")
-    parser.add_argument("--batch-size", type=int, default=DQNConfig.batch_size)
-    parser.add_argument("--min-replay-size", type=int, default=DQNConfig.min_replay_size)
-    args = parser.parse_args()
-    train(
-        TrainingConfig(episodes=args.episodes, checkpoint_path=args.checkpoint, seed=args.seed),
-        DQNConfig(batch_size=args.batch_size, min_replay_size=args.min_replay_size, seed=args.seed, device=args.device),
-    )
+    from training.train_cli import parse_and_train
+
+    parse_and_train(variant="dqn", checkpoint=Path("models/dqn_baseline_2048.pt"), description=__doc__)
 
 
 if __name__ == "__main__":
