@@ -114,7 +114,39 @@ The existing evaluator also supports these checkpoints, including CSV export:
 python -m training.evaluate --checkpoint models/double_dueling_dqn_2048.pt --episodes 100 --episodes-csv results/double_dueling_dqn_evaluation.csv
 Choose a new CSV path if that output already exists.
 
-8. Run the presentation/demo GUI
+8. Train, resume, and evaluate Risk-Aware Dueling Double DQN (RA-D3QN)
+
+Train the final risk-aware model from scratch. This writes a separate checkpoint
+and does not overwrite any earlier model:
+python -m training.train_risk_aware --fresh --episodes 2000 --seed 42 --risk-coefficient 0.1 --checkpoint models\ra_d3qn_2048.pt
+
+Risk-aware smoke run on CPU (pipeline check only, not a gameplay benchmark):
+python -m training.train_risk_aware --fresh --episodes 1 --max-steps-per-episode 32 --batch-size 4 --min-replay-size 4 --epsilon-start 0 --epsilon-end 0 --device cpu --checkpoint models\ra_d3qn_smoke.pt
+python -m training.evaluate --checkpoint models\ra_d3qn_smoke.pt --episodes 2 --max-steps-per-episode 128 --device cpu
+
+Evaluate a trained RA-D3QN checkpoint greedily across 100 seeded games:
+python -m training.evaluate --checkpoint models\ra_d3qn_2048.pt --episodes 100 --seed 1000
+
+Resume the default RA-D3QN checkpoint to 3000 TOTAL episodes. If the default
+checkpoint exists, the trainer resumes it automatically:
+python -m training.train_risk_aware --episodes 3000
+
+Explicitly select a source checkpoint and save the resumed model to a new path:
+python -m training.train_risk_aware --resume models\ra_d3qn_2048.pt --checkpoint models\ra_d3qn_resumed.pt --episodes 3000
+
+The RA-D3QN trainer uses the same learning-rate, gamma, batch-size, replay,
+epsilon, seed, device, and checkpoint interval conventions as the Double DQN
+trainer. For example, add --learning-rate 0.0003 --gamma 0.995
+--replay-capacity 100000 --checkpoint-every 250 to configure them. Risk
+parameters include --risk-coefficient, --mobility-weight, --crowding-weight,
+and --game-over-weight. Checkpoints retain model and optimizer state, replay,
+training progress, random-number-generator state, and risk settings.
+Evaluation reports score, tile, episode length, termination/truncation, board
+risk, and risk-adjusted reward. Risk-adjusted reward is a descriptive metric;
+long multi-seed training and comparisons are still needed to establish model
+performance.
+
+9. Run the presentation/demo GUI
 
 Human playable mode:
 python -m gui.pygame_demo --mode human
@@ -133,6 +165,11 @@ python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action 
 
 Trained Dueling DQN autoplay demo (after Dueling DQN fine-tuning completes):
 $env:DQN_CHECKPOINT = "models\dueling_dqn_2048.pt"
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
+Remove-Item Env:DQN_CHECKPOINT
+
+Trained RA-D3QN autoplay demo:
+$env:DQN_CHECKPOINT = "models\ra_d3qn_2048.pt"
 python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
 Remove-Item Env:DQN_CHECKPOINT
 

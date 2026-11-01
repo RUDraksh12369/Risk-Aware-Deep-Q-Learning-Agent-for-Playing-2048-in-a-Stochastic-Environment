@@ -11,7 +11,8 @@ import numpy as np
 from game.environment import Env2048
 from rl.agent import DQNAgent
 from rl.baselines import GreedyAgent, RandomAgent
-from rl.risk import board_risk
+from rl.risk import action_risks, board_risk
+from rl.risk_aware import RiskAwareDQNAgent
 
 
 def evaluate(
@@ -42,11 +43,13 @@ def evaluate(
     legal_move_counts: list[int] = []
     empty_cell_counts: list[int] = []
     risks: list[float] = []
+    risk_adjusted_scores: list[float] = []
     for offset in range(episodes):
         start_index = len(risks)
         env = Env2048(seed=seed + offset)
         state = env.reset()
         steps = 0
+        cumulative_action_risk = 0.0
         while not env.done:
             if max_steps_per_episode is not None and steps >= max_steps_per_episode:
                 break
@@ -58,6 +61,9 @@ def evaluate(
             empty_cell_counts.append(board_metrics.empty_cells)
             risks.append(board_metrics.score)
             action = agent.select_action(state, mask, epsilon=0.0, game=env.game)
+            chosen_risk = action_risks(env.game)[action]
+            if np.isfinite(chosen_risk):
+                cumulative_action_risk += float(chosen_risk)
             state, _, done, _ = env.step(action)
             steps += 1
             if done:
@@ -66,6 +72,10 @@ def evaluate(
         max_tiles.append(float(env.game.max_tile()))
         episode_lengths.append(steps)
         game_overs.append(env.done or not env.legal_action_mask().any())
+        risk_coefficient = agent.risk_config.risk_coefficient if isinstance(agent, RiskAwareDQNAgent) else 0.0
+        reward_scale = agent.config.reward_scale if isinstance(agent, RiskAwareDQNAgent) else 1.0
+        adjusted_score = float(env.score) - risk_coefficient * cumulative_action_risk / reward_scale
+        risk_adjusted_scores.append(adjusted_score)
         if episode_records is not None:
             episode_risks = np.asarray(risks[start_index:])
             episode_moves = np.asarray(legal_move_counts[start_index:])
@@ -73,6 +83,7 @@ def evaluate(
             episode_records.append({
                 "episode": offset + 1, "seed": seed + offset,
                 "score": scores[-1], "max_tile": max_tiles[-1], "steps": steps,
+                "risk_adjusted_reward": adjusted_score,
                 "terminated": bool(game_overs[-1]), "truncated": not bool(game_overs[-1]),
                 "decision_states": len(episode_risks),
                 "mean_legal_moves": float(episode_moves.mean()) if steps else 0.0,
@@ -88,6 +99,7 @@ def evaluate(
     return {
         "episodes": float(episodes),
         "mean_score": float(score_array.mean()),
+        "mean_risk_adjusted_reward": float(np.mean(risk_adjusted_scores)),
         "median_score": float(np.median(score_array)),
         "best_score": float(score_array.max()),
         "mean_max_tile": float(tile_array.mean()),
