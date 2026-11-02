@@ -92,8 +92,8 @@ def train_from_args(
     args.checkpoint = args.checkpoint or args.resume or default_path
     if args.episodes < 1 or args.max_steps_per_episode < 1 or args.checkpoint_every < 1:
         parser.error("episodes, max-steps-per-episode and checkpoint-every must be positive")
-    if not 0 <= args.seed < 2**32:
-        parser.error("seed must be in [0, 2**32)")
+    if args.seed is not None and not 0 <= args.seed < 2**32:
+        parser.error("seed must be in [0, 2**32) or omitted")
     if not 1 <= args.batch_size <= args.min_replay_size <= args.replay_capacity:
         parser.error("require 1 <= batch-size <= min-replay-size <= replay-capacity")
     if not 0 < args.learning_rate < float("inf"):

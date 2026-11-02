@@ -32,6 +32,17 @@ python -m training.train --episodes 2000 --seed 42 --checkpoint models\dqn_basel
 STANDARD TRAINING COMMANDS
 ==========================
 
+Train all five agents sequentially with the same episode budget for each.
+Training starts from fresh random initialization and does not require a seed:
+
+python -m training.train_all --episodes 50000 --device cuda
+
+The command writes models/dqn_baseline_2048.pt,
+models/doubledqn_2048.pt, models/dueling_dqn_shared.pt,
+models/dueling_double_dqn_2048.pt, and models/ra_d3qn_2048.pt. Each existing
+checkpoint is replaced only after its corresponding training run completes.
+Progress identifies the current agent and reports completion or failure.
+
 All five models use the same validated training arguments, checkpoint lifecycle,
 and total-episode resume semantics. Common arguments include --episodes,
 --checkpoint, --seed, --device, --batch-size, --min-replay-size,
