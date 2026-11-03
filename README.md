@@ -60,6 +60,66 @@ target, device, output path, and checkpoint interval use the CLI values.
 Checkpoint state includes online/target weights, optimizer, replay, training
 progress, and RNG state. RA-D3QN also retains risk settings.
 
+### Persistent runs and hardware profiles
+
+`train_all` retains the repository's existing model order and now resumes each
+model from its default checkpoint. It skips a model whose saved episode count
+already meets the requested total; increase `--episodes` to extend that run.
+Each completed-episode checkpoint is validated before replacement, and the
+preceding valid checkpoint is retained as `*.pt.previous`. If the primary file
+is unreadable, the shared CLI tries that fallback and otherwise stops with an
+error. A JSON `training_registry.json` records status, checkpoint, episode
+count, hardware details, and the effective training configuration. It is local
+run metadata and is ignored by Git.
+
+Start a deliberate new experiment with `--fresh-run`; an existing checkpoint
+is copied to `models/archive/` first. Individual shared trainer commands also
+accept `--fresh-run` (and retain the older `--fresh` spelling). This explicit
+option archives and replaces only the selected checkpoint.
+
+```bash
+# Personal PC; auto-resume existing work
+python -m training.train_all
+
+# Organization workstation; same source and checkpoint workflow
+python -m training.train_all --profile organization --episodes 50000
+
+# Let the runtime discover the available CPU/CUDA device
+python -m training.train_all --profile auto --episodes 50000
+
+# Explicit device selection
+python -m training.train_all --device cpu
+python -m training.train_all --device cuda
+
+# Start a new experiment only when explicitly requested
+python -m training.train_all --fresh-run --profile organization --episodes 50000
+```
+
+Profiles report the operating system, CPU, logical processor count, system
+memory when `psutil` is present, GPU, dedicated device memory reported by
+PyTorch, compute capability, and PyTorch/CUDA versions. They never install or
+upgrade software. Organization and auto choose CUDA when available and CPU
+otherwise; an unavailable explicitly requested CUDA device is an error. The
+personal profile keeps the current device selection behavior. These profiles
+currently select a safe device and record hardware; they do not change the
+algorithm, replay semantics, batch size, environment count, precision, or
+update-to-transition ratio.
+
+For development on the personal PC, commit and push source and documentation
+only. On the organization PC, pull the same revision, activate its existing
+environment, and run `python -m training.train_all --profile organization`.
+Transfer checkpoints separately when the organization machine needs prior
+progress; copy both a checkpoint and its optional `.previous` fallback, and
+keep the paths matching the model defaults under `models/`. Do not transfer
+`training_registry.json` as authoritative state: the checkpoint metadata is
+the source of truth. Checkpoints and replay state are ignored by Git. The
+existing `training.compare` workflow compares algorithm quality under fixed
+budgets and seeds; it is not a hardware throughput benchmark. The current
+profile layer records hardware but does not yet implement parallel
+environments, batched inference, mixed precision, utilization telemetry, or a
+machine-readable execution benchmark. Keep those settings unchanged when
+comparing research results; no throughput gain implies a quality gain.
+
 Use the shared seeded evaluator for any checkpoint, for example:
 
 ```bash

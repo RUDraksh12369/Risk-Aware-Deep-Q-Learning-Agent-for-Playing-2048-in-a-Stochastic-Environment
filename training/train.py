@@ -50,7 +50,7 @@ def epsilon_by_step(step: int, config: TrainingConfig) -> float:
 
 def train(
     training: TrainingConfig, dqn: DQNConfig, *, agent: DQNAgent | None = None,
-    resume: dict | None = None, resumable: bool = False
+    resume: dict | None = None, resumable: bool = False, on_checkpoint=None
 ) -> list[dict[str, float]]:
     """Train a new or supplied agent and return metrics for this run.
 
@@ -117,10 +117,35 @@ def train(
             temporary = Path(file.name)
         try:
             agent.save(temporary, extra)
+            # Validate the completed temporary payload before it can become
+            # the recovery point. Keep the preceding complete file as fallback.
+            payload = torch.load(temporary, map_location="cpu", weights_only=False)
+            if payload.get("extra", {}).get("episode") != episode:
+                raise RuntimeError("Checkpoint validation failed: episode metadata mismatch")
             # Windows requires a writable descriptor for fsync/_commit.
             with temporary.open("r+b") as file:
                 os.fsync(file.fileno())
+            previous = checkpoint.with_suffix(checkpoint.suffix + ".previous")
+            fallback = checkpoint.with_name(checkpoint.name + ".previous.tmp")
+            if checkpoint.is_file():
+                import shutil
+                try:
+                    try:
+                        existing = torch.load(checkpoint, map_location="cpu", weights_only=False)
+                        valid_existing = (isinstance(existing, dict)
+                                          and isinstance(existing.get("config"), dict)
+                                          and isinstance(existing.get("extra"), dict)
+                                          and "episode" in existing["extra"])
+                    except Exception:
+                        valid_existing = False
+                    if valid_existing:
+                        shutil.copy2(checkpoint, fallback)
+                        os.replace(fallback, previous)
+                finally:
+                    fallback.unlink(missing_ok=True)
             os.replace(temporary, checkpoint)
+            if on_checkpoint is not None:
+                on_checkpoint(episode, global_step, checkpoint)
         finally:
             try:
                 temporary.unlink(missing_ok=True)

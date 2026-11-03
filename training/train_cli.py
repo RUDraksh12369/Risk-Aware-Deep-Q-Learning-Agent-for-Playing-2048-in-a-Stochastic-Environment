@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import shutil
+from datetime import datetime, timezone
 from collections.abc import Callable
+from dataclasses import asdict
 from pathlib import Path
 
 import torch
@@ -14,6 +17,8 @@ from rl.doubledqn import DoubleDQNAgent
 from rl.risk import RiskConfig
 from rl.risk_aware import RiskAwareConfig, RiskAwareDQNAgent
 from training.train import TrainingConfig, train
+from training.hardware import resolve_profile
+from training.registry import update_model
 
 
 VARIANT_FLAGS = {
@@ -45,7 +50,8 @@ def add_training_arguments(
         raise ValueError(f"Unsupported training variant: {variant}")
     parser.add_argument("--checkpoint", type=Path, default=None,
                         help=f"Output path (default: {checkpoint or DEFAULT_CHECKPOINTS[variant]})")
-    parser.add_argument("--fresh", action="store_true", help="Start from new weights, even if the output exists")
+    parser.add_argument("--fresh", "--fresh-run", dest="fresh", action="store_true",
+                        help="Explicitly start a new experiment (archives an existing checkpoint)")
     parser.add_argument("--resume", type=Path, help="Resume from a checkpoint; output defaults to this path")
     parser.add_argument("--episodes", type=int, default=TrainingConfig.episodes,
                         help="Total target episode count, including episodes in a resumed checkpoint")
@@ -53,6 +59,8 @@ def add_training_arguments(
     parser.add_argument("--checkpoint-every", type=int, default=TrainingConfig.checkpoint_every)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default=None, help="e.g. cpu, cuda, or cuda:0")
+    parser.add_argument("--profile", choices=("personal", "organization", "auto"), default="personal",
+                        help="Hardware profile; profiles never install or upgrade dependencies")
     parser.add_argument("--batch-size", type=int, default=DQNConfig.batch_size)
     parser.add_argument("--min-replay-size", type=int, default=DQNConfig.min_replay_size)
     parser.add_argument("--replay-capacity", type=int, default=DQNConfig.replay_capacity)
@@ -123,7 +131,31 @@ def train_from_args(
             parser.error(str(error))
 
     if source.exists() and not args.fresh:
-        payload = torch.load(source, map_location="cpu", weights_only=False)
+        try:
+            payload = torch.load(source, map_location="cpu", weights_only=False)
+        except Exception as error:
+            backup = source.with_name(source.name + ".previous")
+            if args.resume or not backup.is_file():
+                parser.error(f"Checkpoint cannot be restored safely: {source}: {error}")
+            try:
+                payload = torch.load(backup, map_location="cpu", weights_only=False)
+                source = backup
+                print(f"Primary checkpoint is invalid; recovering from {backup}")
+            except Exception as backup_error:
+                parser.error(f"Neither checkpoint nor fallback is valid: {error}; {backup_error}")
+        if not isinstance(payload, dict) or not isinstance(payload.get("config"), dict):
+            backup = (source.with_name(source.name + ".previous")
+                      if not args.resume else None)
+            if backup is None or not backup.is_file():
+                parser.error(f"Checkpoint has an invalid structure: {source}")
+            try:
+                payload = torch.load(backup, map_location="cpu", weights_only=False)
+            except Exception as error:
+                parser.error(f"Checkpoint and fallback are invalid: {source}; {error}")
+            if not isinstance(payload, dict) or not isinstance(payload.get("config"), dict):
+                parser.error(f"Checkpoint fallback has an invalid structure: {backup}")
+            source = backup
+            print(f"Primary checkpoint has invalid metadata; recovering from {backup}")
         config_data = payload.get("config", {})
         saved_dueling = bool(config_data.get("dueling", False))
         if variant == "double_dqn" and getattr(args, "dueling", None) is None:
@@ -135,7 +167,8 @@ def train_from_args(
         extra = payload.get("extra", {})
         if not all(key in extra for key in ("episode", "global_step", "history")):
             parser.error("Checkpoint lacks episode/step/history metadata required for resume")
-        agent = (agent_loader or DQNAgent.load)(source, device=args.device)
+        profile_name, hardware = resolve_profile(args.profile, args.device)
+        agent = (agent_loader or DQNAgent.load)(source, device=profile_name.split(":", 1)[1])
         saved_training = extra.get("training_config", {})
         if "training_state" not in extra:
             print("Warning: legacy checkpoint has no replay/RNG state; replay warm-up restarts.")
@@ -147,6 +180,11 @@ def train_from_args(
         training.episodes = args.episodes
         training.checkpoint_path = str(args.checkpoint)
         training.checkpoint_every = args.checkpoint_every
+        update_model(variant, status="running", completed_episodes=int(extra["episode"]),
+                     total_episodes=args.episodes, latest_checkpoint=str(args.checkpoint),
+                     hardware_profile=args.profile, resolved_profile=profile_name,
+                     hardware=hardware.as_dict(), configuration={"training": asdict(training),
+                                                                  "agent": asdict(agent.config)})
         try:
             training.validate()
         except ValueError as error:
@@ -154,8 +192,38 @@ def train_from_args(
         print(f"Resuming {source} after episode {extra['episode']}, step {extra['global_step']}. "
               "Saved model, risk, and available training settings take precedence; --episodes, --device, "
               "--checkpoint and --checkpoint-every use the supplied values.")
-        train_fn(training, agent.config, agent=agent, resume=extra, resumable=True)
+        def checkpointed(episode: int, steps: int, path: Path) -> None:
+            update_model(variant, status="running", completed_episodes=episode,
+                         environment_steps=steps, total_episodes=training.episodes,
+                         latest_checkpoint=str(path), hardware_profile=args.profile,
+                         resolved_profile=profile_name, hardware=hardware.as_dict())
+        try:
+            train_fn(training, agent.config, agent=agent, resume=extra, resumable=True,
+                     on_checkpoint=checkpointed)
+        except TypeError as error:
+            if "on_checkpoint" not in str(error):
+                raise
+            train_fn(training, agent.config, agent=agent, resume=extra, resumable=True)
+        update_model(variant, status="completed",
+                     completed_episodes=max(args.episodes, int(extra["episode"])),
+                     total_episodes=args.episodes, latest_checkpoint=str(args.checkpoint),
+                     completion_status="complete", hardware_profile=args.profile,
+                     resolved_profile=profile_name, hardware=hardware.as_dict())
         return
+
+    profile_name, hardware = resolve_profile(args.profile, args.device)
+    args.device = profile_name.split(":", 1)[1]
+    if args.fresh and source.is_file():
+        archive_dir = source.parent / "archive"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        archived = archive_dir / f"{source.stem}.{stamp}{source.suffix}"
+        suffix = 1
+        while archived.exists():
+            archived = archive_dir / f"{source.stem}.{stamp}.{suffix}{source.suffix}"
+            suffix += 1
+        shutil.copy2(source, archived)
+        print(f"Archived prior checkpoint to {archived}")
 
     config = DQNConfig(
         batch_size=args.batch_size, min_replay_size=args.min_replay_size,
@@ -194,7 +262,26 @@ def train_from_args(
         training.validate()
     except ValueError as error:
         parser.error(str(error))
-    train_fn(training, agent.config, agent=agent, resumable=True)
+    update_model(variant, status="running", completed_episodes=0,
+                 total_episodes=args.episodes, latest_checkpoint=str(args.checkpoint),
+                 hardware_profile=args.profile, resolved_profile=profile_name,
+                 hardware=hardware.as_dict(), configuration={"training": asdict(training),
+                                                              "agent": asdict(agent.config)})
+    def checkpointed(episode: int, steps: int, path: Path) -> None:
+        update_model(variant, status="running", completed_episodes=episode,
+                     environment_steps=steps, total_episodes=training.episodes,
+                     latest_checkpoint=str(path), hardware_profile=args.profile,
+                     resolved_profile=profile_name, hardware=hardware.as_dict())
+    try:
+        train_fn(training, agent.config, agent=agent, resumable=True, on_checkpoint=checkpointed)
+    except TypeError as error:
+        if "on_checkpoint" not in str(error):
+            raise
+        train_fn(training, agent.config, agent=agent, resumable=True)
+    update_model(variant, status="completed", completed_episodes=args.episodes,
+                 total_episodes=args.episodes, completion_status="complete",
+                 latest_checkpoint=str(args.checkpoint), hardware_profile=args.profile,
+                 resolved_profile=profile_name, hardware=hardware.as_dict())
 
 
 def parse_and_train(
