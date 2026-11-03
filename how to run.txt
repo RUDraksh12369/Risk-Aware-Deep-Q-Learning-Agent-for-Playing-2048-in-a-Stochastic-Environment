@@ -227,3 +227,6 @@ Autoplay modes:
 - Q or Esc: quit
 
 python -m training.train --episodes 10000 --device cuda --seed 42 --checkpoint models\dqn_baseline_2048.pt
+
+For final Training
+python -m training.train_all --episodes 50000 --device cuda
