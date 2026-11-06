@@ -2,12 +2,8 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .DS_Store
-training_registry.json
-models/*.pt
 models/.*.tmp.pt
-models/*.previous
 models/*.previous.tmp
 models/archive/
-results/benchmarks/
 venv/
 .venv/

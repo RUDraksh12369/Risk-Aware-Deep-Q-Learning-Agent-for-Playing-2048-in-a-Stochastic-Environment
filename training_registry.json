@@ -1,0 +1,303 @@
+{
+  "experiments": {
+    "double_dqn": {
+      "completed_episodes": 50000,
+      "completion_status": "complete",
+      "configuration": {
+        "agent": {
+          "batch_size": 128,
+          "device": "cuda",
+          "double_dqn": true,
+          "dueling": false,
+          "gamma": 0.995,
+          "gradient_clip_norm": 10.0,
+          "hidden_dims": [
+            256,
+            256
+          ],
+          "learning_rate": 0.0003,
+          "max_exponent": 16.0,
+          "min_replay_size": 2000,
+          "n_actions": 4,
+          "replay_capacity": 100000,
+          "reward_scale": 0.01,
+          "seed": 42,
+          "state_dim": 16,
+          "target_tau": 0.005,
+          "target_update_interval": 1000
+        },
+        "training": {
+          "checkpoint_every": 250,
+          "checkpoint_path": "models\\doubledqn_2048.pt",
+          "episodes": 50000,
+          "epsilon_decay_steps": 300000,
+          "epsilon_end": 0.05,
+          "epsilon_start": 1.0,
+          "game_over_penalty": 0.0,
+          "illegal_move_penalty": 0.0,
+          "max_steps_per_episode": 5000,
+          "seed": 42
+        }
+      },
+      "environment_steps": 10325849,
+      "hardware": {
+        "compute_capability": "8.6",
+        "cpu": "Intel(R) Core(TM) i7-14700K",
+        "cuda_available": true,
+        "cuda_version": "12.4",
+        "gpu": "NVIDIA RTX A1000",
+        "gpu_memory_gb": 8.0,
+        "logical_processors": 28,
+        "os": "Windows 10",
+        "ram_gb": null,
+        "torch_version": "2.6.0+cu124"
+      },
+      "hardware_profile": "personal",
+      "latest_checkpoint": "models\\doubledqn_2048.pt",
+      "model": "double_dqn",
+      "resolved_profile": "personal:cuda",
+      "status": "completed",
+      "total_episodes": 50000,
+      "updated_at": "2026-11-05T14:45:31.672696+00:00"
+    },
+    "dqn": {
+      "completed_episodes": 50000,
+      "completion_status": "complete",
+      "configuration": {
+        "agent": {
+          "batch_size": 128,
+          "device": "cuda",
+          "double_dqn": false,
+          "dueling": false,
+          "gamma": 0.995,
+          "gradient_clip_norm": 10.0,
+          "hidden_dims": [
+            256,
+            256
+          ],
+          "learning_rate": 0.0003,
+          "max_exponent": 16.0,
+          "min_replay_size": 2000,
+          "n_actions": 4,
+          "replay_capacity": 100000,
+          "reward_scale": 0.01,
+          "seed": null,
+          "state_dim": 16,
+          "target_tau": 0.005,
+          "target_update_interval": 1000
+        },
+        "training": {
+          "checkpoint_every": 250,
+          "checkpoint_path": "models\\dqn_baseline_2048.pt",
+          "episodes": 50000,
+          "epsilon_decay_steps": 300000,
+          "epsilon_end": 0.05,
+          "epsilon_start": 1.0,
+          "game_over_penalty": 0.0,
+          "illegal_move_penalty": 0.0,
+          "max_steps_per_episode": 5000,
+          "seed": null
+        }
+      },
+      "error": "CUDA was requested but this PyTorch installation has no available CUDA device.",
+      "hardware": {
+        "compute_capability": "8.6",
+        "cpu": "Intel(R) Core(TM) i7-14700K",
+        "cuda_available": true,
+        "cuda_version": "12.4",
+        "gpu": "NVIDIA RTX A1000",
+        "gpu_memory_gb": 8.0,
+        "logical_processors": 28,
+        "os": "Windows 10",
+        "ram_gb": null,
+        "torch_version": "2.6.0+cu124"
+      },
+      "hardware_profile": "personal",
+      "latest_checkpoint": "models\\dqn_baseline_2048.pt",
+      "model": "dqn",
+      "resolved_profile": "personal:cuda",
+      "status": "completed",
+      "total_episodes": 50000,
+      "updated_at": "2026-11-05T14:45:30.036277+00:00"
+    },
+    "dueling_double_dqn": {
+      "completed_episodes": 50000,
+      "completion_status": "complete",
+      "configuration": {
+        "agent": {
+          "batch_size": 128,
+          "device": "cuda",
+          "double_dqn": true,
+          "dueling": true,
+          "gamma": 0.995,
+          "gradient_clip_norm": 10.0,
+          "hidden_dims": [
+            256,
+            256
+          ],
+          "learning_rate": 0.0003,
+          "max_exponent": 16.0,
+          "min_replay_size": 2000,
+          "n_actions": 4,
+          "replay_capacity": 100000,
+          "reward_scale": 0.01,
+          "seed": 42,
+          "state_dim": 16,
+          "target_tau": 0.005,
+          "target_update_interval": 1000
+        },
+        "training": {
+          "checkpoint_every": 250,
+          "checkpoint_path": "models\\dueling_double_dqn_2048.pt",
+          "episodes": 50000,
+          "epsilon_decay_steps": 300000,
+          "epsilon_end": 0.05,
+          "epsilon_start": 1.0,
+          "game_over_penalty": 0.0,
+          "illegal_move_penalty": 0.0,
+          "max_steps_per_episode": 5000,
+          "seed": 42
+        }
+      },
+      "environment_steps": 9643943,
+      "hardware": {
+        "compute_capability": "8.6",
+        "cpu": "Intel(R) Core(TM) i7-14700K",
+        "cuda_available": true,
+        "cuda_version": "12.4",
+        "gpu": "NVIDIA RTX A1000",
+        "gpu_memory_gb": 8.0,
+        "logical_processors": 28,
+        "os": "Windows 10",
+        "ram_gb": null,
+        "torch_version": "2.6.0+cu124"
+      },
+      "hardware_profile": "personal",
+      "latest_checkpoint": "models\\dueling_double_dqn_2048.pt",
+      "model": "dueling_double_dqn",
+      "resolved_profile": "personal:cuda",
+      "status": "completed",
+      "total_episodes": 50000,
+      "updated_at": "2026-11-06T05:14:50.607828+00:00"
+    },
+    "dueling_dqn": {
+      "completed_episodes": 50000,
+      "completion_status": "complete",
+      "configuration": {
+        "agent": {
+          "batch_size": 128,
+          "device": "cuda",
+          "double_dqn": false,
+          "dueling": true,
+          "gamma": 0.995,
+          "gradient_clip_norm": 10.0,
+          "hidden_dims": [
+            256,
+            256
+          ],
+          "learning_rate": 0.0003,
+          "max_exponent": 16.0,
+          "min_replay_size": 2000,
+          "n_actions": 4,
+          "replay_capacity": 100000,
+          "reward_scale": 0.01,
+          "seed": 42,
+          "state_dim": 16,
+          "target_tau": 0.005,
+          "target_update_interval": 1000
+        },
+        "training": {
+          "checkpoint_every": 250,
+          "checkpoint_path": "models\\dueling_dqn_shared.pt",
+          "episodes": 50000,
+          "epsilon_decay_steps": 300000,
+          "epsilon_end": 0.05,
+          "epsilon_start": 1.0,
+          "game_over_penalty": 0.0,
+          "illegal_move_penalty": 0.0,
+          "max_steps_per_episode": 5000,
+          "seed": 42
+        }
+      },
+      "environment_steps": 10344221,
+      "hardware": {
+        "compute_capability": "8.6",
+        "cpu": "Intel(R) Core(TM) i7-14700K",
+        "cuda_available": true,
+        "cuda_version": "12.4",
+        "gpu": "NVIDIA RTX A1000",
+        "gpu_memory_gb": 8.0,
+        "logical_processors": 28,
+        "os": "Windows 10",
+        "ram_gb": null,
+        "torch_version": "2.6.0+cu124"
+      },
+      "hardware_profile": "personal",
+      "latest_checkpoint": "models\\dueling_dqn_shared.pt",
+      "model": "dueling_dqn",
+      "resolved_profile": "personal:cuda",
+      "status": "completed",
+      "total_episodes": 50000,
+      "updated_at": "2026-11-05T20:43:37.083515+00:00"
+    },
+    "ra_d3qn": {
+      "completed_episodes": 41500,
+      "configuration": {
+        "agent": {
+          "batch_size": 128,
+          "device": "cuda",
+          "double_dqn": true,
+          "dueling": true,
+          "gamma": 0.995,
+          "gradient_clip_norm": 10.0,
+          "hidden_dims": [
+            256,
+            256
+          ],
+          "learning_rate": 0.0003,
+          "max_exponent": 16.0,
+          "min_replay_size": 2000,
+          "n_actions": 4,
+          "replay_capacity": 100000,
+          "reward_scale": 0.01,
+          "seed": 42,
+          "state_dim": 16,
+          "target_tau": 0.005,
+          "target_update_interval": 1000
+        },
+        "training": {
+          "checkpoint_every": 250,
+          "checkpoint_path": "models\\ra_d3qn_2048.pt",
+          "episodes": 50000,
+          "epsilon_decay_steps": 300000,
+          "epsilon_end": 0.05,
+          "epsilon_start": 1.0,
+          "game_over_penalty": 0.0,
+          "illegal_move_penalty": 0.0,
+          "max_steps_per_episode": 5000,
+          "seed": 42
+        }
+      },
+      "environment_steps": 8352244,
+      "hardware": {
+        "compute_capability": "8.6",
+        "cpu": "Intel(R) Core(TM) i7-14700K",
+        "cuda_available": true,
+        "cuda_version": "12.4",
+        "gpu": "NVIDIA RTX A1000",
+        "gpu_memory_gb": 8.0,
+        "logical_processors": 28,
+        "os": "Windows 10",
+        "ram_gb": null,
+        "torch_version": "2.6.0+cu124"
+      },
+      "hardware_profile": "personal",
+      "latest_checkpoint": "models\\ra_d3qn_2048.pt",
+      "model": "ra_d3qn",
+      "resolved_profile": "personal:cuda",
+      "status": "running",
+      "total_episodes": 50000,
+      "updated_at": "2026-11-06T15:59:13.385506+00:00"
+    }
+  }
+}
