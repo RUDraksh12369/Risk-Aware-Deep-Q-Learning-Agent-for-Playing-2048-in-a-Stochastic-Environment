@@ -9,3 +9,5 @@ models/*.previous
 models/*.previous.tmp
 models/archive/
 results/benchmarks/
+venv/
+.venv/
