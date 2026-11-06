@@ -1,232 +1,121 @@
-How to run this project
-=======================
+2048 Risk-Aware Deep Q-Learning Project
 
-1. Create and activate a virtual environment
-
-Windows PowerShell:
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-
-macOS/Linux:
-python -m venv venv
-source venv/bin/activate
-
-2. Install dependencies
-
-pip install -r requirements.txt
-
-3. Run tests
-
-pytest -q
-
-4. Run quick console smoke tests
-
-python -m game.game
-python -m game.environment
-
-5. Train and evaluate the plain DQN baseline
-
-Train plain DQN for a fixed number of episodes:
-python -m training.train --episodes 2000 --seed 42 --checkpoint models\dqn_baseline_2048.pt
-
-STANDARD TRAINING COMMANDS
-==========================
-
-Train all five agents sequentially with the same episode budget for each.
-Training starts from fresh random initialization and does not require a seed:
-
+Run all commands from the project root with the virtual environment
+activated and dependencies installed.
+1. Train all five models
+Train all five agents sequentially for 50,000 episodes each:
 python -m training.train_all --episodes 50000 --device cuda
 
-The command writes models/dqn_baseline_2048.pt,
-models/doubledqn_2048.pt, models/dueling_dqn_shared.pt,
-models/dueling_double_dqn_2048.pt, and models/ra_d3qn_2048.pt. Each existing
-checkpoint is replaced only after its corresponding training run completes.
-Progress identifies the current agent and reports completion or failure.
+The command trains these models:
+- DQN --- models/dqn_baseline_2048.pt
+- Double DQN --- models/doubledqn_2048.pt
+- Dueling DQN --- models/dueling_dqn_shared.pt
+- Dueling Double DQN --- models/dueling_double_dqn_2048.pt
+- Risk-Aware Dueling Double DQN (RA-D3QN) --- models/ra_d3qn_2048.pt
+Existing checkpoints resume automatically. Use --fresh to start
+training from scratch. The --episodes value is the total target
+episode count.
 
-All five models use the same validated training arguments, checkpoint lifecycle,
-and total-episode resume semantics. Common arguments include --episodes,
---checkpoint, --seed, --device, --batch-size, --min-replay-size,
---replay-capacity, --learning-rate, --gamma, --target-tau,
---target-update-interval, --epsilon-start, --epsilon-end,
---epsilon-decay-steps, --max-steps-per-episode, and --checkpoint-every.
-`--target-tau none` or --hard-target-updates selects periodic hard target copies;
-otherwise the default is soft updates with tau 0.005. Shared network options also
-include --reward-scale, --gradient-clip-norm, --max-exponent, and --hidden-dims.
-RA-D3QN additionally accepts --risk-coefficient, --mobility-weight,
---crowding-weight, and --game-over-weight.
 
-Existing output checkpoints resume automatically. Use --fresh to restart, or
---resume PATH to choose a source checkpoint. --episodes is the total target.
-Saved model/training settings take precedence; the CLI uses supplied total target,
-device, output path, and save interval. Checkpoints retain model/target weights,
-optimizer, replay, training progress, RNG state, and (for RA-D3QN) risk settings.
-The separate default outputs are models\dqn_baseline_2048.pt,
-models\doubledqn_2048.pt, models\dueling_dqn_shared.pt,
-models\dueling_double_dqn_2048.pt, and models\ra_d3qn_2048.pt.
+2. Train models individually
+Change --episodes to the desired total episode target.
 
-python -m training.train --episodes 2000 --checkpoint models/dqn_baseline_2048.pt --seed 42
-python -m training.train_doubledqn --episodes 2000 --checkpoint models/doubledqn_2048.pt --seed 42
+DQN
+python -m training.train --episodes 2000 --seed 42 --checkpoint models/dqn_baseline_2048.pt
+Double DQN
+python -m training.train_doubledqn --episodes 2000 --seed 42 --checkpoint models/doubledqn_2048.pt
+Dueling DQN
 python -m training.train_duelingdqn --episodes 2000 --seed 42
+Dueling Double DQN
 python -m training.train_double_dueling_dqn --episodes 2000 --seed 42
+Risk-Aware Dueling Double DQN (RA-D3QN)
 python -m training.train_risk_aware --episodes 2000 --seed 42 --risk-coefficient 0.1
+3. Recommended submission demonstration: optimized RA-D3QN
+Open PowerShell in the project root and activate the existing virtual
+environment. Copy and run this complete block. It explicitly sets the checkpoint
+and optimized inference options so old shell settings cannot select a different
+policy.
 
-The older rl.duelingDQN and rl.double_dueling_dqn subcommands remain supported
-for their specialized fine-tuning, evaluation, and resume workflows.
+$env:DQN_CHECKPOINT = "models\ra_d3qn_2048.pt"
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
+$env:DQN_RISK_COEFFICIENT = "0.20"
+$env:DQN_TIE_TOLERANCE = "0.01"
+$env:DQN_HEURISTIC_MONOTONICITY = "1.0"
+$env:DQN_HEURISTIC_SMOOTHNESS = "1.0"
+$env:DQN_HEURISTIC_EMPTY_CELLS = "1.0"
+$env:DQN_HEURISTIC_CORNER = "1.0"
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
 
-Evaluate it greedily across 100 fresh games:
-python -m training.evaluate --checkpoint models\dqn_baseline_2048.pt --episodes 100
+This is the recommended submission demonstration configuration. The GUI logs
+the selected checkpoint and inference settings when it starts. The risk override
+and tie-breaker operate only at inference time; the checkpoint stays unchanged.
+The heuristic is consulted only when legal-action Q-values are within the 0.01
+relative window.
 
-The trainer saves intermediate checkpoints every 250 episodes. The enhanced
-checkpoint is preferred automatically by the GUI when it exists.
+4. Run the original RA-D3QN inference
+This uses the checkpoint's saved risk coefficient of 0.10, greedy selection,
+and legal-action masking. It does not apply the inference-time coefficient
+override or heuristic tie-breaking.
 
-6. Fine-tune, resume, and evaluate the separate Dueling DQN
+$env:DQN_CHECKPOINT = "models\ra_d3qn_2048.pt"
+$env:DQN_INFERENCE_POLICY = "original"
+Remove-Item Env:DQN_RISK_COEFFICIENT -ErrorAction SilentlyContinue
+Remove-Item Env:DQN_TIE_TOLERANCE -ErrorAction SilentlyContinue
+Remove-Item Env:DQN_HEURISTIC_MONOTONICITY -ErrorAction SilentlyContinue
+Remove-Item Env:DQN_HEURISTIC_SMOOTHNESS -ErrorAction SilentlyContinue
+Remove-Item Env:DQN_HEURISTIC_EMPTY_CELLS -ErrorAction SilentlyContinue
+Remove-Item Env:DQN_HEURISTIC_CORNER -ErrorAction SilentlyContinue
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
 
-These are the legacy transfer-learning commands in rl\duelingDQN.py and never
-overwrite the original DQN checkpoint, logs, or results. Their resume episode
-count is additional episodes; use training.train_duelingdqn for the shared
-total-target behavior.
+Alternatively, use the original callable directly:
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action_original --delay-ms 140
 
-Fine-tune Dueling DQN from the pretrained original checkpoint:
-python -m rl.duelingDQN train --pretrained models\dqn_2048.pt --episodes 100
+5. Run another trained model
+For each run, set the matching checkpoint explicitly. These models use their
+original greedy legal-action policy.
 
-Resume an existing Dueling DQN checkpoint:
-python -m rl.duelingDQN train --resume models\dueling_dqn_2048.pt --episodes 100
+DQN
+$env:DQN_CHECKPOINT = "models\dqn_baseline_2048.pt"
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
 
-Evaluate Dueling DQN greedily across 100 fresh games:
-python -m rl.duelingDQN evaluate --checkpoint models\dueling_dqn_2048.pt --episodes 100
+Double DQN
+$env:DQN_CHECKPOINT = "models\doubledqn_2048.pt"
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
 
-Compare the original DQN and Dueling DQN using the same evaluation seeds:
-python -m rl.duelingDQN compare --dqn-checkpoint models\dqn_2048.pt --dueling-checkpoint models\dueling_dqn_2048.pt --episodes 100
+Dueling DQN
+$env:DQN_CHECKPOINT = "models\dueling_dqn_shared.pt"
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
 
-Dueling checkpoints are saved to models\dueling_dqn_2048.pt. Its training
-history, transfer report, evaluation metrics, and comparison results are saved
-separately under artifacts\dueling_dqn\.
+Dueling Double DQN
+$env:DQN_CHECKPOINT = "models\dueling_double_dqn_2048.pt"
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
 
-7. Legacy Double Dueling DQN (DDDQN) commands
+The `agent` mode requires `--agent module:callable`; the commands above use the
+project's checkpoint-compatible callable. No Python files need manual edits.
 
-For the common five-model interface, use training.train_double_dueling_dqn
-from section 5. The subcommand below remains available for compatibility.
-Run these commands from the project root after installing dependencies.
-Use py instead of python on Windows if python is not on PATH.
+6. Built-in game modes
+These modes do not load trained checkpoints. Clear a checkpoint from the current
+PowerShell session before switching from an agent demo.
 
-Train from scratch (separate checkpoint; no pretrained model required):
-python -m rl.double_dueling_dqn train --episodes 2000 --seed 42
-
-Train on a CUDA-capable GPU with a CUDA-enabled PyTorch installation:
-python -m rl.double_dueling_dqn train --episodes 2000 --device cuda --checkpoint models/double_dueling_dqn_cuda.pt
-
-Evaluate greedily across 100 fresh games:
-python -m rl.double_dueling_dqn evaluate --checkpoint models/double_dueling_dqn_2048.pt --episodes 100 --seed 1000
-
-Resume to 3000 TOTAL episodes, writing to a NEW checkpoint path:
-python -m rl.double_dueling_dqn train --resume models/double_dueling_dqn_2048.pt --checkpoint models/double_dueling_dqn_resumed.pt --episodes 3000
-
-Short CPU smoke test with learning enabled (not a gameplay benchmark):
-python -m rl.double_dueling_dqn train --episodes 1 --max-steps-per-episode 32 --batch-size 4 --min-replay-size 4 --device cpu --checkpoint models/double_dueling_dqn_smoke.pt
-python -m rl.double_dueling_dqn evaluate --checkpoint models/double_dueling_dqn_smoke.pt --episodes 2 --max-steps-per-episode 128 --device cpu
-
-The default checkpoint is models/double_dueling_dqn_2048.pt. Training refuses
-an existing output path, including on resume; choose a new --checkpoint path
-for each new invocation. During a run it updates its own checkpoint every
-250 episodes by default (change with --checkpoint-every), and at completion.
-Checkpoints include networks, optimizer, replay, RNG state, episode/step
-counters, training settings, and history (score, reward, tile, steps, loss,
-epsilon). Resume restores saved model/training settings; --episodes is the
-total target, not the number of additional episodes. Device, output path,
-and save interval can be changed on resume.
-
-New-run configuration options include --hidden-dims, --max-exponent,
---reward-scale, --gradient-clip-norm, --target-update-interval, and
---hard-target-updates (otherwise --target-tau controls soft updates).
-Resume uses saved model/exploration settings and requires replay/RNG metadata.
-
-Validate without training, game moves, or checkpoint writes:
-python -B -m unittest tests.test_double_dqn_validation tests.test_double_dueling_validation -v
-
-The existing evaluator also supports these checkpoints, including CSV export:
-python -m training.evaluate --checkpoint models/double_dueling_dqn_2048.pt --episodes 100 --episodes-csv results/double_dueling_dqn_evaluation.csv
-Choose a new CSV path if that output already exists.
-
-8. Train, resume, and evaluate Risk-Aware Dueling Double DQN (RA-D3QN)
-
-Train the final risk-aware model from scratch. This writes a separate checkpoint
-and does not overwrite any earlier model:
-python -m training.train_risk_aware --fresh --episodes 2000 --seed 42 --risk-coefficient 0.1 --checkpoint models\ra_d3qn_2048.pt
-
-Risk-aware smoke run on CPU (pipeline check only, not a gameplay benchmark):
-python -m training.train_risk_aware --fresh --episodes 1 --max-steps-per-episode 32 --batch-size 4 --min-replay-size 4 --epsilon-start 0 --epsilon-end 0 --device cpu --checkpoint models\ra_d3qn_smoke.pt
-python -m training.evaluate --checkpoint models\ra_d3qn_smoke.pt --episodes 2 --max-steps-per-episode 128 --device cpu
-
-Evaluate a trained RA-D3QN checkpoint greedily across 100 seeded games:
-python -m training.evaluate --checkpoint models\ra_d3qn_2048.pt --episodes 100 --seed 1000
-
-Resume the default RA-D3QN checkpoint to 3000 TOTAL episodes. If the default
-checkpoint exists, the trainer resumes it automatically:
-python -m training.train_risk_aware --episodes 3000
-
-Explicitly select a source checkpoint and save the resumed model to a new path:
-python -m training.train_risk_aware --resume models\ra_d3qn_2048.pt --checkpoint models\ra_d3qn_resumed.pt --episodes 3000
-
-The RA-D3QN trainer follows the same common argument and resume behavior as
-the other four models. Its risk-specific options are --risk-coefficient,
---mobility-weight, --crowding-weight, and --game-over-weight. Resume restores
-model, optimizer, replay, progress, RNG state, and saved risk settings.
-Evaluation reports score, tile, episode length, termination/truncation, board
-risk, and risk-adjusted reward. Risk-adjusted reward is a descriptive metric;
-long multi-seed training and comparisons are still needed to establish model
-performance.
-
-9. Run the presentation/demo GUI
-
-Human playable mode:
+Human play (arrow keys/WASD move; R restarts; Q or Esc quits):
+Remove-Item Env:DQN_CHECKPOINT -ErrorAction SilentlyContinue
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
 python -m gui.pygame_demo --mode human
 
-Heuristic autoplay demo:
+Random legal-move autoplay (seed 42 makes the game repeatable):
+python -m gui.pygame_demo --mode random --seed 42 --delay-ms 180
+
+Simple heuristic autoplay:
 python -m gui.pygame_demo --mode heuristic --delay-ms 180
 
-Pure MCTS autoplay demo:
-python -m gui.pygame_demo --mode mcts --delay-ms 140 --mcts-simulations 200
+Standalone MCTS demo (not part of an ML model or training workflow):
+python -m gui.pygame_demo --mode mcts --delay-ms 140 --mcts-simulations 200 --mcts-rollout-depth 36
 
-Random autoplay demo:
-python -m gui.pygame_demo --mode random --seed 42
-
-Trained DQN autoplay demo (after training completes):
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
-
-Trained Dueling DQN autoplay demo (after Dueling DQN fine-tuning completes):
-$env:DQN_CHECKPOINT = "models\dueling_dqn_2048.pt"
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
-Remove-Item Env:DQN_CHECKPOINT
-
-Trained RA-D3QN autoplay demo:
-$env:DQN_CHECKPOINT = "models\ra_d3qn_2048.pt"
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
-Remove-Item Env:DQN_CHECKPOINT
-
-Use a specific checkpoint instead of the automatic enhanced/original choice
-(Windows PowerShell example):
-$env:DQN_CHECKPOINT = "models\dqn_2048_enhanced.pt"
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
-Remove-Item Env:DQN_CHECKPOINT
-
-The GUI is only for presenting the project and showing agent behavior. It is
-not used for training or automated testing.
-
-GUI controls
-============
-
-Human mode:
-- Arrow keys or WASD: move tiles
-- R: restart
-- Q or Esc: quit
-
-Autoplay modes:
-- Space: pause/resume
-- R: restart
-- Use the sidebar buttons/slider, or +/- keys, to adjust speed
-- Q or Esc: quit
-
-python -m training.train --episodes 10000 --device cuda --seed 42 --checkpoint models\dqn_baseline_2048.pt
-
-For final Training
-python -m training.train_all --episodes 50000 --device cuda
+Autoplay controls: Space pauses or resumes, R restarts, +/- adjusts speed, and
+Q or Esc quits. The GUI modes implemented in this checkout are human, random,
+heuristic, mcts, and agent; separate Vs Bot and Pass and Play modes are not
+implemented here.

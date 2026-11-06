@@ -1,0 +1,21 @@
+{
+  "checkpoint": "models\\ra_d3qn_2048.pt",
+  "episodes_per_policy": 100,
+  "shared_seed_range": [
+    1000,
+    1099
+  ],
+  "tie_tolerance_relative": 0.01,
+  "heuristic_weights": {
+    "monotonicity": 1.0,
+    "smoothness": 1.0,
+    "empty_cells": 1.0,
+    "highest_tile_corner": 1.0
+  },
+  "notes": [
+    "No training or checkpoint writes are performed.",
+    "The original inference implementation already uses epsilon=0 and legal-action masking.",
+    "Original and explicitly masked greedy rows should therefore match exactly.",
+    "Heuristics are consulted only among legal actions inside the configured Q-value window."
+  ]
+}

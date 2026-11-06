@@ -1,0 +1,52 @@
+{
+  "status": "completed",
+  "checkpoint": "models\\ra_d3qn_2048.pt",
+  "device": "cuda",
+  "checkpoint_risk_coefficient": 0.1,
+  "risk_sweep": [
+    0.0,
+    0.05,
+    0.1,
+    0.15,
+    0.2
+  ],
+  "primary_seed_range": [
+    1000,
+    1099
+  ],
+  "holdout_seed_range": [
+    2000,
+    2099
+  ],
+  "episodes_per_configuration_per_phase": 100,
+  "tie_tolerance_relative": 0.01,
+  "heuristic_weights": {
+    "monotonicity": 1.0,
+    "smoothness": 1.0,
+    "empty_cells": 1.0,
+    "highest_tile_corner": 1.0
+  },
+  "model_weights_modified": false,
+  "training_invoked": false,
+  "risk_sweep_selection_scores": {
+    "risk_0.00": 0.1875,
+    "risk_0.05": 0.34375,
+    "original_ra_d3qn": 0.5,
+    "risk_0.15": 0.65625,
+    "risk_0.20": 0.8125
+  },
+  "best_risk_coefficient_before_heuristic": 0.2,
+  "primary_selection_scores": {
+    "risk_0.00": 0.14583333333333331,
+    "risk_0.05": 0.24999999999999997,
+    "original_ra_d3qn": 0.35416666666666663,
+    "risk_0.15": 0.4583333333333333,
+    "risk_0.20": 0.5625,
+    "heuristic_at_original_risk": 0.8125,
+    "risk_0.20_plus_heuristic": 0.9166666666666666
+  },
+  "selected_configuration": "risk_0.20_plus_heuristic",
+  "selected_risk_coefficient": 0.2,
+  "selected_heuristic_tiebreak": true,
+  "holdout_original": "original_ra_d3qn"
+}

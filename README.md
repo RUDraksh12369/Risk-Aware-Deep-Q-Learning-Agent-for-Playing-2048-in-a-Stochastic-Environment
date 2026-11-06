@@ -227,22 +227,107 @@ python -m training.evaluate --checkpoint models/double_dueling_dqn_2048.pt --epi
 
 ## Demo GUI
 
-The pygame GUI is for presentation/demo use only. It renders the project's
-existing `Game2048` engine and is not used by training or tests.
+The pygame GUI uses the existing game engine and does not change model weights.
+Open PowerShell in the project root and activate the project's existing virtual
+environment before running these commands.
 
-```bash
+### Recommended submission demo: optimized RA-D3QN
+
+This explicitly selects the RA-D3QN checkpoint and validated inference settings.
+Set the settings here so values left over in a PowerShell session cannot change
+the demonstration policy.
+
+```powershell
+$env:DQN_CHECKPOINT = "models\ra_d3qn_2048.pt"
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
+$env:DQN_RISK_COEFFICIENT = "0.20"
+$env:DQN_TIE_TOLERANCE = "0.01"
+$env:DQN_HEURISTIC_MONOTONICITY = "1.0"
+$env:DQN_HEURISTIC_SMOOTHNESS = "1.0"
+$env:DQN_HEURISTIC_EMPTY_CELLS = "1.0"
+$env:DQN_HEURISTIC_CORNER = "1.0"
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
+```
+
+This is the recommended submission demonstration configuration. At startup, the
+GUI logs the checkpoint and selected inference settings. Heuristics only break
+actions whose legal-action Q-values are within the configured relative window.
+
+### Original RA-D3QN inference
+
+The original policy uses the checkpoint's saved risk coefficient (`0.10`),
+deterministic greedy selection, and legal-action masking. It does not use the
+inference-time coefficient override or heuristic tie-breaker.
+
+```powershell
+$env:DQN_CHECKPOINT = "models\ra_d3qn_2048.pt"
+$env:DQN_INFERENCE_POLICY = "original"
+Remove-Item Env:DQN_RISK_COEFFICIENT -ErrorAction SilentlyContinue
+Remove-Item Env:DQN_TIE_TOLERANCE -ErrorAction SilentlyContinue
+Remove-Item Env:DQN_HEURISTIC_MONOTONICITY -ErrorAction SilentlyContinue
+Remove-Item Env:DQN_HEURISTIC_SMOOTHNESS -ErrorAction SilentlyContinue
+Remove-Item Env:DQN_HEURISTIC_EMPTY_CELLS -ErrorAction SilentlyContinue
+Remove-Item Env:DQN_HEURISTIC_CORNER -ErrorAction SilentlyContinue
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
+```
+
+You can also select the original callable directly with
+`--agent inference.autoplay:choose_action_original`.
+
+### Other trained models
+
+Each command explicitly selects its checkpoint. These non-RA models retain the
+original deterministic, legal-masked policy.
+
+```powershell
+# DQN
+$env:DQN_CHECKPOINT = "models\dqn_baseline_2048.pt"
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
+
+# Double DQN
+$env:DQN_CHECKPOINT = "models\doubledqn_2048.pt"
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
+
+# Dueling DQN
+$env:DQN_CHECKPOINT = "models\dueling_dqn_shared.pt"
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
+
+# Dueling Double DQN
+$env:DQN_CHECKPOINT = "models\dueling_double_dqn_2048.pt"
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
+```
+
+The `agent` mode requires an action callable in `module:callable` format. The
+project callable supports the checkpoint files listed above. A compatible custom
+callable can also be supplied with `--agent`.
+
+### Built-in game modes
+
+These modes do not use a model checkpoint. Clear any checkpoint or policy
+selection left over from an agent demonstration before running them.
+
+```powershell
+# Human: arrow keys or WASD move; R restarts; Q or Esc quits
+Remove-Item Env:DQN_CHECKPOINT -ErrorAction SilentlyContinue
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
 python -m gui.pygame_demo --mode human
+
+# Random legal moves, using a repeatable seed
+python -m gui.pygame_demo --mode random --seed 42 --delay-ms 180
+
+# Simple heuristic autoplay
 python -m gui.pygame_demo --mode heuristic --delay-ms 180
-python -m gui.pygame_demo --mode mcts --delay-ms 140 --mcts-simulations 200
-python -m gui.pygame_demo --mode random --seed 42
+
+# Standalone MCTS demo, separate from the ML model and training workflow
+python -m gui.pygame_demo --mode mcts --delay-ms 140 --mcts-simulations 200 --mcts-rollout-depth 36
 ```
 
-For a trained agent demo, expose a callable that returns one of
-`game.game.Action` or action ids `0..3`, then run:
-
-```bash
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action
-```
+For autoplay, Space pauses or resumes, R restarts, +/- adjusts speed, and Q or
+Esc quits. This checkout does not define separate Vs Bot or Pass and Play modes.
 
 `training.train` uses a masked Dueling Double DQN: the MLP receives the 16
 log2 tile exponents, experience replay decorrelates updates, score rewards are
@@ -252,9 +337,9 @@ important because the environment otherwise permits them. Training runs for
 the requested number of episodes. A checkpoint is saved after training (and
 every 250 episodes by default).
 
-The GUI automatically prefers `models/dqn_2048_enhanced.pt` when it exists,
-falling back to the original `models/dqn_2048.pt` checkpoint. Set
-`DQN_CHECKPOINT` to select a specific saved model.
+Inference prefers `models/ra_d3qn_2048.pt` when `DQN_CHECKPOINT` is unset, then
+falls back to `models/dqn_2048_enhanced.pt` or `models/dqn_baseline_2048.pt`.
+Set `DQN_CHECKPOINT` to select a specific saved model.
 
 ### Separate Double DQN training
 

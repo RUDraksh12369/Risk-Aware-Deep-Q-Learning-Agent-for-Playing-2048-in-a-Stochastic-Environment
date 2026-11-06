@@ -156,15 +156,21 @@ def test_baseline_checkpoint_does_not_silently_acquire_risk(tmp_path):
         RiskAwareDQNAgent.load(path, device="cpu")
 
 
-def test_gui_inference_restores_and_uses_saved_risk_policy(tmp_path, monkeypatch):
+def test_gui_inference_preserves_original_and_uses_optimized_default(tmp_path, monkeypatch):
     from inference import autoplay
 
     path = tmp_path / "risk.pt"
-    known_policy().save(path)
+    policy = known_policy()
+    saved_risk_coefficient = policy.risk_config.risk_coefficient
+    policy.save(path)
     monkeypatch.setattr(autoplay, "_agent", None)
     monkeypatch.setenv("DQN_CHECKPOINT", str(path))
-    assert autoplay.choose_action(decision_env().game) == Action.LEFT
+    monkeypatch.setenv("DQN_INFERENCE_POLICY", "optimized")
+    game = decision_env().game
+    assert autoplay.choose_action_original(game) == Action.LEFT
+    assert autoplay.choose_action(game) in game.legal_actions()
     assert isinstance(autoplay._agent, RiskAwareDQNAgent)
+    assert autoplay._agent.risk_config.risk_coefficient == saved_risk_coefficient
 
 
 def test_evaluation_is_repeatable_and_counts_truncation_separately():

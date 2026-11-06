@@ -1,0 +1,4 @@
+policy,episodes,average_final_score,maximum_tile_achieved,average_maximum_tile,average_moves,games_reaching_512_or_higher,games_reaching_1024_or_higher,games_reaching_2048_or_higher,games_reaching_4096_or_higher,games_reaching_8192_or_higher
+original_inference,100,3184.56,512,278.72,254.23,21,0,0,0,0
+legal_masked_greedy,100,3184.56,512,278.72,254.23,21,0,0,0,0
+heuristic_tiebreak,100,5018.2,1024,424.96,361.98,61,3,0,0,0

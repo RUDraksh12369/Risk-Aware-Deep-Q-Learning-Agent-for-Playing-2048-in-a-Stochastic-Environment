@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import os
 import random
 import sys
+import time
 from dataclasses import dataclass
 from typing import Iterable, Optional, Protocol
 
@@ -47,6 +49,11 @@ SUBTLE_TEXT_COLOR = (143, 122, 102)
 PANEL_COLOR = (238, 228, 218)
 BUTTON_COLOR = (143, 122, 102)
 BUTTON_HOVER_COLOR = (119, 110, 101)
+REPORT_OVERLAY_COLOR = (18, 18, 18, 220)
+REPORT_PANEL_COLOR = (28, 28, 28)
+ACCENT_COLOR = (237, 194, 46)
+REPORT_TEXT_COLOR = (245, 245, 245)
+REPORT_MUTED_COLOR = (180, 180, 180)
 
 TILE_COLORS = {
     2: (238, 228, 218),
@@ -143,7 +150,7 @@ def normalize_action(action: Action | int) -> Action:
 class Pygame2048Demo:
     def __init__(self, config: DemoConfig):
         pygame.init()
-        pygame.display.set_caption("2048 MCTS Demo")
+        pygame.display.set_caption("2048 Demo")
         self.window = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         self.clock = pygame.time.Clock()
         self.config = config
@@ -166,9 +173,17 @@ class Pygame2048Demo:
         self.last_step_at = 0
         self.paused = config.mode == "human"
         self.dragging_speed = False
+        self.show_report = False
+        self.show_menu = False
+        self.started_at = time.perf_counter()
+        self.ended_at: Optional[float] = None
         self.speed_track = pygame.Rect(SIDEBAR_X, 277, SIDEBAR_WIDTH, 10)
         self.slower_button = pygame.Rect(SIDEBAR_X, 315, 74, 38)
         self.faster_button = pygame.Rect(SIDEBAR_X + SIDEBAR_WIDTH - 74, 315, 74, 38)
+        self.report_play_button = pygame.Rect(250, 570, 210, 52)
+        self.report_menu_button = pygame.Rect(500, 570, 210, 52)
+        self.menu_start_button = pygame.Rect(375, 435, 210, 52)
+        self.menu_quit_button = pygame.Rect(375, 505, 210, 52)
 
     def run(self) -> None:
         running = True
@@ -186,7 +201,7 @@ class Pygame2048Demo:
                 elif event.type == pygame.MOUSEMOTION and self.dragging_speed:
                     self._set_delay_from_mouse(event.pos[0])
 
-            if self._should_autoplay():
+            if not self.show_report and not self.show_menu and self._should_autoplay():
                 self._step_autoplay()
 
             self._draw()
@@ -196,6 +211,17 @@ class Pygame2048Demo:
     def _handle_keydown(self, key: int) -> bool:
         if key in (pygame.K_ESCAPE, pygame.K_q):
             return False
+        if self.show_report:
+            if key in (pygame.K_RETURN, pygame.K_SPACE):
+                self._reset()
+            elif key == pygame.K_m:
+                self.show_report = False
+                self.show_menu = True
+            return True
+        if self.show_menu:
+            if key in (pygame.K_RETURN, pygame.K_SPACE):
+                self._start_game()
+            return True
         if key == pygame.K_r:
             self._reset()
         elif key == pygame.K_SPACE and self.config.mode != "human":
@@ -209,6 +235,19 @@ class Pygame2048Demo:
         return True
 
     def _handle_mouse_down(self, position: tuple[int, int]) -> None:
+        if self.show_report:
+            if self.report_play_button.collidepoint(position):
+                self._reset()
+            elif self.report_menu_button.collidepoint(position):
+                self.show_report = False
+                self.show_menu = True
+            return
+        if self.show_menu:
+            if self.menu_start_button.collidepoint(position):
+                self._start_game()
+            elif self.menu_quit_button.collidepoint(position):
+                pygame.event.post(pygame.event.Event(pygame.QUIT))
+            return
         if self.slower_button.collidepoint(position):
             self._adjust_delay(60)
         elif self.faster_button.collidepoint(position):
@@ -230,6 +269,14 @@ class Pygame2048Demo:
         self.last_action = None
         self.last_reward = 0
         self.last_step_at = 0
+        self.started_at = time.perf_counter()
+        self.ended_at = None
+        self.show_report = False
+        self.show_menu = False
+        self.paused = self.config.mode == "human"
+
+    def _start_game(self) -> None:
+        self._reset()
 
     def _should_autoplay(self) -> bool:
         if self.config.mode == "human" or self.paused or self.game.done:
@@ -257,19 +304,27 @@ class Pygame2048Demo:
 
     def _step(self, action: Action | int) -> None:
         action = normalize_action(action)
-        _, reward, _, info = self.game.step(action)
+        _, reward, done, info = self.game.step(action)
         if info["valid"]:
             self.last_action = action
             self.last_reward = reward
             self.last_step_at = pygame.time.get_ticks()
+        if done and self.ended_at is None:
+            self.ended_at = time.perf_counter()
 
     def _draw(self) -> None:
         self.window.fill(BACKGROUND_COLOR)
         self._draw_header()
         self._draw_board()
         self._draw_sidebar()
-        if self.game.done:
-            self._draw_overlay("Game Over", "Press R to restart")
+        if self.game.done and not self.show_menu:
+            self.show_report = True
+            if self.ended_at is None:
+                self.ended_at = time.perf_counter()
+        if self.show_report:
+            self._draw_game_over_report()
+        elif self.show_menu:
+            self._draw_main_menu()
         pygame.display.flip()
 
     def _draw_header(self) -> None:
@@ -387,6 +442,92 @@ class Pygame2048Demo:
         center_y = HEADER_HEIGHT + BOARD_SIZE_PX // 2
         self.window.blit(title_surf, title_surf.get_rect(center=(center_x, center_y - 28)))
         self.window.blit(subtitle_surf, subtitle_surf.get_rect(center=(center_x, center_y + 28)))
+
+    def _display_mode(self) -> str:
+        if self.config.mode == "human":
+            return "Human"
+        if self.config.mode == "mcts":
+            return "MCTS"
+        if self.config.mode != "agent":
+            return self.config.mode.title()
+
+        checkpoint = os.environ.get("DQN_CHECKPOINT", "models/dqn_baseline_2048.pt")
+        name = checkpoint.replace("\\", "/").rsplit("/", 1)[-1].lower()
+        labels = {
+            "dqn_baseline_2048.pt": "DQN",
+            "doubledqn_2048.pt": "Double DQN",
+            "dueling_dqn_shared.pt": "Dueling DQN",
+            "dueling_double_dqn_2048.pt": "Dueling Double DQN",
+            "ra_d3qn_2048.pt": "Risk-Aware D3QN",
+        }
+        return labels.get(name, "Agent")
+
+    def _draw_game_over_report(self) -> None:
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        overlay.fill(REPORT_OVERLAY_COLOR)
+        self.window.blit(overlay, (0, 0))
+
+        panel = pygame.Rect(190, 115, 580, 535)
+        pygame.draw.rect(self.window, REPORT_PANEL_COLOR, panel, border_radius=14)
+        pygame.draw.rect(self.window, ACCENT_COLOR, panel, width=2, border_radius=14)
+
+        won = self.game.max_tile() >= 2048
+        title = "You Won!" if won else "Game Over"
+        title_surf = self.message_font.render(title, True, ACCENT_COLOR)
+        self.window.blit(title_surf, title_surf.get_rect(center=(panel.centerx, 165)))
+        self._draw_text("GAME REPORT", self.tiny_font, REPORT_MUTED_COLOR, (panel.x + 48, 215))
+
+        end_time = self.ended_at if self.ended_at is not None else time.perf_counter()
+        elapsed = max(0, int(end_time - self.started_at))
+        minutes, seconds = divmod(elapsed, 60)
+        values = [
+            ("Final score", f"{self.game.score:,}"),
+            ("Highest tile", f"{self.game.max_tile():,}"),
+            ("Total moves", f"{self.game.moves_made:,}"),
+            ("Game duration", f"{minutes:02d}:{seconds:02d}"),
+            ("Game mode", self._display_mode()),
+            ("Result", "Won" if won else "Game Over"),
+        ]
+        label_x = panel.x + 48
+        value_right = panel.right - 48
+        for index, (label, value) in enumerate(values):
+            y = 254 + index * 46
+            label_surf = self.small_font.render(label, True, REPORT_MUTED_COLOR)
+            value_surf = self.small_font.render(value, True, REPORT_TEXT_COLOR)
+            self.window.blit(label_surf, (label_x, y))
+            self.window.blit(value_surf, value_surf.get_rect(topright=(value_right, y)))
+            if index < len(values) - 1:
+                pygame.draw.line(self.window, (58, 58, 58), (label_x, y + 34), (value_right, y + 34), 1)
+
+        mouse_pos = pygame.mouse.get_pos()
+        self._draw_report_button(self.report_play_button, "Play Again", self.report_play_button.collidepoint(mouse_pos), primary=True)
+        self._draw_report_button(self.report_menu_button, "Main Menu", self.report_menu_button.collidepoint(mouse_pos))
+
+    def _draw_main_menu(self) -> None:
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        overlay.fill(REPORT_OVERLAY_COLOR)
+        self.window.blit(overlay, (0, 0))
+        panel = pygame.Rect(240, 190, 480, 390)
+        pygame.draw.rect(self.window, REPORT_PANEL_COLOR, panel, border_radius=14)
+        pygame.draw.rect(self.window, ACCENT_COLOR, panel, width=2, border_radius=14)
+        title = self.title_font.render("2048", True, ACCENT_COLOR)
+        subtitle = self.small_font.render(f"Current mode: {self._display_mode()}", True, REPORT_MUTED_COLOR)
+        self.window.blit(title, title.get_rect(center=(panel.centerx, 285)))
+        self.window.blit(subtitle, subtitle.get_rect(center=(panel.centerx, 345)))
+        mouse_pos = pygame.mouse.get_pos()
+        self._draw_report_button(self.menu_start_button, "Start Game", self.menu_start_button.collidepoint(mouse_pos), primary=True)
+        self._draw_report_button(self.menu_quit_button, "Quit", self.menu_quit_button.collidepoint(mouse_pos))
+
+    def _draw_report_button(self, rect: pygame.Rect, label: str, hovered: bool, primary: bool = False) -> None:
+        if primary:
+            color = (255, 211, 64) if hovered else ACCENT_COLOR
+            text_color = (20, 20, 20)
+        else:
+            color = (75, 75, 75) if hovered else (53, 53, 53)
+            text_color = REPORT_TEXT_COLOR
+        pygame.draw.rect(self.window, color, rect, border_radius=8)
+        text = self.small_font.render(label, True, text_color)
+        self.window.blit(text, text.get_rect(center=rect.center))
 
     def _draw_text(
         self,
