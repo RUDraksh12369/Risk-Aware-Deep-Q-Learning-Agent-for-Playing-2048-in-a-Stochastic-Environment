@@ -128,13 +128,31 @@ The Pygame demo runs from the repository root. Launch human play with:
 python -m gui.pygame_demo --mode human
 ```
 
-For an agent demo, point `DQN_CHECKPOINT` at a checkpoint and provide an action
-callable in `module:callable` form:
+To demonstrate the trained models in sequence, run the block below. Each
+checkpoint must already exist. The GUI identifies the selected model; quit a
+demo with Q or Esc to start the next one.
 
 ```powershell
+$env:DQN_CHECKPOINT = "models\dqn_baseline_2048.pt"
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action
+
+$env:DQN_CHECKPOINT = "models\doubledqn_2048.pt"
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action
+
+$env:DQN_CHECKPOINT = "models\dueling_dqn_shared.pt"
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action
+
+$env:DQN_CHECKPOINT = "models\dueling_double_dqn_2048.pt"
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action
+
 $env:DQN_CHECKPOINT = "models\ra_d3qn_2048.pt"
+$env:DQN_INFERENCE_POLICY = "original"
 python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action
 ```
+
+For RA-D3QN's inference-time optimized policy, follow the PowerShell example in
+[how to run.txt](how%20to%20run.txt). It applies a configurable risk penalty and
+heuristic tie-breaker without changing the checkpoint.
 
 ## Available Game Modes
 

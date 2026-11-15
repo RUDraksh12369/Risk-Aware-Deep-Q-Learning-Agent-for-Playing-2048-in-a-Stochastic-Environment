@@ -37,12 +37,13 @@ python -m training.evaluate --checkpoint models/dueling_dqn_shared.pt --episodes
 python -m training.evaluate --checkpoint models/dueling_double_dqn_2048.pt --episodes 100
 python -m training.evaluate --checkpoint models/ra_d3qn_2048.pt --episodes 100
 
-Play a trained model in the GUI
+Demo the trained models in the GUI
 
-Set DQN_CHECKPOINT to the model to play, then launch agent mode. The callable
-automatically uses the ordinary legal-action greedy policy for the four
-non-risk-aware variants. Clear any RA-D3QN inference overrides when switching
-from the optimized RA-D3QN example later in this file.
+Run the matching block to open a playable demo controlled by that trained
+checkpoint. The GUI labels the selected model. The first four variants use
+their ordinary legal-action greedy policies; the RA-D3QN block below uses the
+checkpoint's saved risk settings. Quit a demo with Q or Esc. Each checkpoint
+must already exist. To show all five models, run each block in sequence.
 
 DQN
 $env:DQN_CHECKPOINT = "models\dqn_baseline_2048.pt"
