@@ -112,3 +112,6 @@ python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action 
 
 Alternatively, the original callable can be selected directly with
 --agent inference.autoplay:choose_action_original.
+
+Demo command with default heuristic
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
