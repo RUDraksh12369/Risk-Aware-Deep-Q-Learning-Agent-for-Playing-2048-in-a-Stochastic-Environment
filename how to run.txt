@@ -4,6 +4,15 @@ Run commands from the repository root after installing requirements and
 activating the virtual environment. The README.md is the canonical guide for
 installation, training, evaluation, checkpoints, and GUI modes.
 
+Play 2048 yourself
+
+Launch the game in human mode:
+
+python -m gui.pygame_demo --mode human
+
+Use the arrow keys or WASD to move tiles. Press R to restart, or Q/Esc to
+quit.
+
 Train one model
 
 Use the matching command below to train an individual variant. The default
