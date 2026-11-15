@@ -1,629 +1,265 @@
-# Risk-Aware Deep Reinforcement Learning for Long-Horizon Decision Making under Stochastic Uncertainty
-### An Empirical Study Using the 2048 Game Environment
+# Risk-Aware Deep Q-Learning for 2048
 
-## Setup
+This repository studies deep Q-learning for 2048, where random tile spawns make
+long-horizon decisions uncertain. It contains a 2048 engine, a Gym-like
+environment, five DQN variants, a separate Monte Carlo Tree Search (MCTS)
+player, evaluation and comparison tools, and a Pygame demo. The implementation
+is complete enough to run experiments; substantive multi-seed comparisons and
+research conclusions remain future work.
 
-```bash
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+## Project Overview
+
+The agent observes a 4×4 board encoded as 16 log2 tile values, and chooses one
+of four moves. The environment rewards score gain and reports legal actions.
+Training, evaluation, inference, and game rendering are separate workflows.
+
+## Research Objectives
+
+- Compare DQN variants under matched training budgets and seeded evaluation.
+- Measure board-level risk from mobility, crowding, and immediate danger after
+  the next tile spawn.
+- Study RA-D3QN, which penalizes action values by a configurable risk score.
+- Use held-out seeds, ablations, and substantive multi-seed runs before drawing
+  conclusions about playing strength.
+
+## Algorithms Implemented
+
+| Variant | Description |
+| --- | --- |
+| DQN | Standard value network and target-network learning. |
+| Double DQN | Online network selects the next action; target network evaluates it. |
+| Dueling DQN | Separates state value and action advantage estimates. |
+| Dueling Double DQN | Combines the dueling head and Double DQN target. |
+| RA-D3QN | Dueling Double DQN with risk-adjusted behavior action selection. |
+
+The RA-D3QN risk penalty changes action selection during behavior and inference;
+rewards and Bellman targets remain unchanged. MCTS is a separate planning demo,
+not a sixth learned model or part of the training suite.
+
+## Key Features
+
+- Legal-action masking during learned action selection and bootstrapping.
+- Resumable checkpoints that include training state; `--episodes` is a total
+  target, including completed episodes in a resumed checkpoint.
+- Shared seeded evaluation, episode exports, comparison manifests and CSVs,
+  and descriptive plots and reports.
+- Human, random, heuristic, MCTS, and supplied-agent GUI modes.
+
+## Project Architecture
+
+- `game/`: 2048 rules and the RL-facing environment.
+- `rl/`: networks, agents, replay, risk calculations, and baseline policies.
+- `training/`: trainers, checkpoint/evaluation utilities, comparisons, and
+  analysis.
+- `inference/`: checkpoint-backed policies and inference-only comparisons.
+- `mcts/`: independent Monte Carlo Tree Search player.
+- `gui/`: demo-only Pygame interface.
+- `models/`: included model checkpoints and optional `.previous` backups.
+- `results/`, `artifacts/`: experiment outputs and reports.
+- `tests/`: unit and integration tests.
+
+See [handbook.md](handbook.md) for algorithm details, checkpoint behavior,
+risk definitions, evaluation metrics, and historical verification notes.
+
+## Installation and Environment Setup
+
+Run commands from the repository root. Python 3.10 or later is recommended.
+Create and activate a virtual environment, then install the pinned-by-range
+dependencies in `requirements.txt`:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 ```
 
-## Running tests
+On macOS or Linux, activate with `source .venv/bin/activate`. For CUDA training,
+use a PyTorch installation compatible with the installed CUDA runtime and GPU;
+the trainer does not install or upgrade packages automatically.
 
-```bash
-pytest -q
-# or, if pytest isn't available:
-PYTHONPATH=. python3 tests/test_game.py
+## Training All Models
+
+`training.train_all` trains the five variants sequentially, using their default
+checkpoints. Existing checkpoints resume automatically. The default target is
+2,000 episodes per model.
+
+```powershell
+python -m training.train_all --episodes 2000 --device cpu
 ```
 
-## Quick smoke tests
+Choose `--device cuda` for a CUDA-enabled PyTorch setup, or omit `--device` to
+use the current profile's device selection. Supported profiles are `personal`,
+`organization`, and `auto`; `organization` and `auto` select CUDA when
+available, otherwise CPU. Add `--fresh-run` only to start a new experiment;
+existing checkpoints are archived before replacement.
 
-```bash
-python -m game.game          # pure mechanics demo (a few scripted moves)
-python -m game.environment   # RL-wrapper demo (one full random episode)
-python -m training.train --episodes 2000 --seed 42 --checkpoint models/dqn_baseline_2048.pt
-python -m training.evaluate --checkpoint models/dqn_baseline_2048.pt --episodes 100
+```powershell
+python -m training.train_all --episodes 50000 --profile auto
+python -m training.train_all --episodes 2000 --fresh-run --device cpu
 ```
 
-## Standardized model training
+## Training Individual Models
 
-The five model variants share one CLI, validation rules, checkpoint lifecycle,
-and total-episode resume semantics:
+Each command below trains one variant. All support `--episodes`, `--checkpoint`,
+`--seed`, `--device`, `--profile`, `--fresh`/`--fresh-run`, and `--resume`.
+Common learning options include `--batch-size`, `--min-replay-size`,
+`--learning-rate`, `--gamma`, `--epsilon-start`, `--epsilon-end`,
+`--epsilon-decay-steps`, and `--max-steps-per-episode`. RA-D3QN also accepts
+`--risk-coefficient`, `--mobility-weight`, `--crowding-weight`, and
+`--game-over-weight`.
 
-```bash
-python -m training.train --episodes 2000 --seed 42 --checkpoint models/dqn_baseline_2048.pt
+```powershell
+python -m training.train --episodes 2000 --seed 42
 python -m training.train_doubledqn --episodes 2000 --seed 42
 python -m training.train_duelingdqn --episodes 2000 --seed 42
 python -m training.train_double_dueling_dqn --episodes 2000 --seed 42
 python -m training.train_risk_aware --episodes 2000 --seed 42 --risk-coefficient 0.1
 ```
 
-All accept `--episodes`, `--checkpoint`, `--seed`, `--device`, `--batch-size`,
-`--min-replay-size`, `--replay-capacity`, `--learning-rate`, `--gamma`,
-`--target-tau`, `--target-update-interval`, `--epsilon-start`, `--epsilon-end`,
-`--epsilon-decay-steps`, `--max-steps-per-episode`, and `--checkpoint-every`.
-`--target-tau none` or `--hard-target-updates` enables hard target updates at
-`--target-update-interval`; otherwise tau 0.005 is the default. Shared optional
-network settings are `--reward-scale`, `--gradient-clip-norm`, `--max-exponent`,
-and `--hidden-dims`. RA-D3QN also accepts `--risk-coefficient`,
-`--mobility-weight`, `--crowding-weight`, and `--game-over-weight`.
+By default, a trainer resumes its default checkpoint if present. `--resume PATH`
+selects a source checkpoint; absent an explicit `--checkpoint`, it also remains
+the output path. Saved model and training settings take precedence on resume.
 
-Each model has a separate default checkpoint under `models/`:
-`dqn_baseline_2048.pt`, `doubledqn_2048.pt`, `dueling_dqn_shared.pt`,
-`dueling_double_dqn_2048.pt`, and `ra_d3qn_2048.pt`. Existing output checkpoints
-resume automatically; `--fresh` explicitly restarts, while `--resume PATH`
-selects a source checkpoint and saves there unless `--checkpoint` specifies a
-new output. `--episodes` is the total episode target. Saved model and training
-settings take precedence on resume; the trainer prints this, while episode
-target, device, output path, and checkpoint interval use the CLI values.
-Checkpoint state includes online/target weights, optimizer, replay, training
-progress, and RNG state. RA-D3QN also retains risk settings.
+## Running the GUI
 
-### Persistent runs and hardware profiles
+The Pygame demo runs from the repository root. Launch human play with:
 
-`train_all` retains the repository's existing model order and now resumes each
-model from its default checkpoint. It skips a model whose saved episode count
-already meets the requested total; increase `--episodes` to extend that run.
-Each completed-episode checkpoint is validated before replacement, and the
-preceding valid checkpoint is retained as `*.pt.previous`. If the primary file
-is unreadable, the shared CLI tries that fallback and otherwise stops with an
-error. A JSON `training_registry.json` records status, checkpoint, episode
-count, hardware details, and the effective training configuration. It is local
-run metadata and is ignored by Git.
-
-Start a deliberate new experiment with `--fresh-run`; an existing checkpoint
-is copied to `models/archive/` first. Individual shared trainer commands also
-accept `--fresh-run` (and retain the older `--fresh` spelling). This explicit
-option archives and replaces only the selected checkpoint.
-
-```bash
-# Personal PC; auto-resume existing work
-python -m training.train_all
-
-# Organization workstation; same source and checkpoint workflow
-python -m training.train_all --profile organization --episodes 50000
-
-# Let the runtime discover the available CPU/CUDA device
-python -m training.train_all --profile auto --episodes 50000
-
-# Explicit device selection
-python -m training.train_all --device cpu
-python -m training.train_all --device cuda
-
-# Start a new experiment only when explicitly requested
-python -m training.train_all --fresh-run --profile organization --episodes 50000
+```powershell
+python -m gui.pygame_demo --mode human
 ```
 
-Profiles report the operating system, CPU, logical processor count, system
-memory when `psutil` is present, GPU, dedicated device memory reported by
-PyTorch, compute capability, and PyTorch/CUDA versions. They never install or
-upgrade software. Organization and auto choose CUDA when available and CPU
-otherwise; an unavailable explicitly requested CUDA device is an error. The
-personal profile keeps the current device selection behavior. These profiles
-currently select a safe device and record hardware; they do not change the
-algorithm, replay semantics, batch size, environment count, precision, or
-update-to-transition ratio.
+For an agent demo, point `DQN_CHECKPOINT` at a checkpoint and provide an action
+callable in `module:callable` form:
 
-For development on the personal PC, commit and push source and documentation
-only. On the organization PC, pull the same revision, activate its existing
-environment, and run `python -m training.train_all --profile organization`.
-Transfer checkpoints separately when the organization machine needs prior
-progress; copy both a checkpoint and its optional `.previous` fallback, and
-keep the paths matching the model defaults under `models/`. Do not transfer
-`training_registry.json` as authoritative state: the checkpoint metadata is
-the source of truth. Checkpoints and replay state are ignored by Git. The
-existing `training.compare` workflow compares algorithm quality under fixed
-budgets and seeds; it is not a hardware throughput benchmark. The current
-profile layer records hardware but does not yet implement parallel
-environments, batched inference, mixed precision, utilization telemetry, or a
-machine-readable execution benchmark. Keep those settings unchanged when
-comparing research results; no throughput gain implies a quality gain.
+```powershell
+$env:DQN_CHECKPOINT = "models\ra_d3qn_2048.pt"
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action
+```
 
-Use the shared seeded evaluator for any checkpoint, for example:
+## Available Game Modes
 
-```bash
+The supported `--mode` choices are `human`, `random`, `heuristic`, `mcts`, and
+`agent`. Human play uses arrow keys or WASD; R restarts and Q or Esc quits.
+Autoplay modes also support Space to pause/resume, +/- to change speed, and R to
+restart. Separate “Vs Bot” and “Pass and Play” modes are not implemented.
+
+```powershell
+python -m gui.pygame_demo --mode random --seed 42
+python -m gui.pygame_demo --mode heuristic
+python -m gui.pygame_demo --mode mcts --mcts-simulations 200 --mcts-rollout-depth 36
+```
+
+MCTS is a standalone gameplay policy and does not load a neural checkpoint.
+
+## Running Trained Models
+
+Evaluate a checkpoint with greedy, seeded episodes. The evaluator reports score,
+maximum tile, episode length, termination/truncation, and board-risk metrics.
+Use `--max-steps-per-episode` for a bounded evaluation; use `--seed` to set the
+first environment seed.
+
+```powershell
 python -m training.evaluate --checkpoint models/ra_d3qn_2048.pt --episodes 100 --seed 1000
 ```
 
-## Dueling DQN (separate from the original DQN)
+To play through the GUI, set `DQN_CHECKPOINT` to any supported checkpoint and
+run the agent command in “Running the GUI.” The inference loader selects
+`models/ra_d3qn_2048.pt` by default when it exists; set the environment variable
+to make model selection explicit. GUI inference does not update model weights.
 
-Previously bundled DQN checkpoints remain compatible with the shared
-inference and evaluation loaders. For example:
+## Model Checkpoints
 
-```bash
-python -m training.evaluate --checkpoint models/dqn_2048.pt --episodes 100
-```
+The five standard trainer defaults are:
 
-Fine-tune the separate Dueling DQN from the existing checkpoint (this does not
-write to `models/dqn_2048.pt`):
+| Variant | Default checkpoint |
+| --- | --- |
+| DQN | `models/dqn_baseline_2048.pt` |
+| Double DQN | `models/doubledqn_2048.pt` |
+| Dueling DQN | `models/dueling_dqn_shared.pt` |
+| Dueling Double DQN | `models/dueling_double_dqn_2048.pt` |
+| RA-D3QN | `models/ra_d3qn_2048.pt` |
 
-```bash
-python -m rl.duelingDQN train --pretrained models/dqn_2048.pt --episodes 100
-```
+All five primary checkpoint files are present in this checkout. Four also have
+`.pt.previous` fallback files; DQN does not. Checkpoints are binary model data,
+not documentation or source, and are not tracked as regular Git files here.
+Training can create additional checkpoints and archive older ones under
+`models/archive/` when explicitly started fresh.
 
-Resume its separately saved checkpoint, evaluate it, or compare both models
-using the same episode seeds:
+## Experiments and Evaluation
 
-```bash
-python -m rl.duelingDQN train --resume models/dueling_dqn_2048.pt --episodes 100
-python -m rl.duelingDQN evaluate --checkpoint models/dueling_dqn_2048.pt --episodes 100
-python -m rl.duelingDQN compare --dqn-checkpoint models/dqn_2048.pt --dueling-checkpoint models/dueling_dqn_2048.pt --episodes 100
-```
-
-Dueling checkpoints are stored under `models/dueling_dqn_2048.pt`; Dueling
-training histories, transfer reports, and evaluation results are stored under
-`artifacts/dueling_dqn/`.  The transfer report explicitly records copied and
-newly initialised tensors.  Replay data is absent from the existing DQN
-checkpoint, but is included in new Dueling checkpoints to support resuming.
-
-## Double Dueling DQN (DDDQN)
-
-`rl/double_dueling_dqn.py` provides the standalone `DoubleDuelingDQNAgent`.
-For the common five-model CLI, train with `python -m training.train_double_dueling_dqn`; the `rl.double_dueling_dqn` subcommand below remains available as a legacy entrypoint.
-
-It requires both dueling heads (`Q = V + A - mean(A)`) and Double DQN targets:
-the online network selects the best legal next action, and the target network
-evaluates that action. Terminal targets equal the reward. It reuses the shared
-environment, log2 state encoding, replay buffer, hyperparameters, training logs,
-and evaluation methodology. No pretrained checkpoint is required.
-
-Run from the project root after setup. On Windows, replace `python` with `py`
-if `python` is not on PATH.
-
-```bash
-# Train from scratch; default output: models/double_dueling_dqn_2048.pt
-python -m rl.double_dueling_dqn train --episodes 2000 --seed 42
-
-# GPU training requires CUDA-capable hardware and a CUDA-enabled PyTorch build
-python -m rl.double_dueling_dqn train --episodes 2000 --device cuda --checkpoint models/double_dueling_dqn_cuda.pt
-
-# Greedy evaluation using the shared evaluator and fixed environment seeds
-python -m rl.double_dueling_dqn evaluate --checkpoint models/double_dueling_dqn_2048.pt --episodes 100 --seed 1000
-
-# Resume to 3000 TOTAL episodes, saving to a NEW output checkpoint
-python -m rl.double_dueling_dqn train --resume models/double_dueling_dqn_2048.pt --checkpoint models/double_dueling_dqn_resumed.pt --episodes 3000
-
-# Short CPU smoke test with learning enabled
-python -m rl.double_dueling_dqn train --episodes 1 --max-steps-per-episode 32 --batch-size 4 --min-replay-size 4 --device cpu --checkpoint models/double_dueling_dqn_smoke.pt
-python -m rl.double_dueling_dqn evaluate --checkpoint models/double_dueling_dqn_smoke.pt --episodes 2 --max-steps-per-episode 128 --device cpu
-```
-
-Training refuses an existing output path, including on resume. Choose a new
-`--checkpoint` path for each invocation. Within a run, the checkpoint is updated
-every 250 episodes by default (`--checkpoint-every` changes this), and at
-completion. Saved state includes online/target networks, optimizer, replay,
-RNG states, episode/global-step counters, training settings, and history with
-score, reward, maximum tile, steps, loss, and epsilon. History is stored inside
-the checkpoint rather than in a separate JSON file.
-
-On resume, saved model/training settings take precedence; the total episode
-target, device, output path, and save interval can change. `--episodes` is the
-total desired count, not additional episodes. Smoke tests use capped episodes
-and do not measure trained gameplay strength.
-
-The DDDQN trainer also accepts `--hidden-dims`, `--max-exponent`,
-`--reward-scale`, `--gradient-clip-norm`, and `--target-update-interval`.
-Use `--hard-target-updates` for periodic target copies; otherwise
-`--target-tau` controls soft updates. These settings apply to new runs; resume
-uses the saved model and exploration settings. Incomplete replay/RNG metadata
-is rejected before continuation. All default hyperparameters are unchanged.
-
-Check DDDQN and its shared dependencies without training or game moves:
-
-```bash
-python -B -m unittest tests.test_double_dqn_validation tests.test_double_dueling_validation -v
-```
-
-Evaluation reports score, maximum tile, tile-reaching rates, episode length,
-termination/truncation rates, and board-risk metrics. For a fair comparison,
-use the same evaluation seeds, episode counts, and step limits across models.
-The existing evaluator and GUI loader also accept these checkpoints. To export
-individual evaluation episodes to a new CSV file:
-
-```bash
-python -m training.evaluate --checkpoint models/double_dueling_dqn_2048.pt --episodes 100 --episodes-csv results/double_dueling_dqn_evaluation.csv
-```
-
-## Demo GUI
-
-The pygame GUI uses the existing game engine and does not change model weights.
-Open PowerShell in the project root and activate the project's existing virtual
-environment before running these commands.
-
-### Recommended submission demo: optimized RA-D3QN
-
-This explicitly selects the RA-D3QN checkpoint and validated inference settings.
-Set the settings here so values left over in a PowerShell session cannot change
-the demonstration policy.
+`training.compare` runs matched training and seeded evaluations for the five
+learned variants and the `random` and `greedy` references. Its output directory
+must be new. `--smoke` uses tiny budgets to check the pipeline; it is not a
+performance experiment.
 
 ```powershell
-$env:DQN_CHECKPOINT = "models\ra_d3qn_2048.pt"
-Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
-$env:DQN_RISK_COEFFICIENT = "0.20"
-$env:DQN_TIE_TOLERANCE = "0.01"
-$env:DQN_HEURISTIC_MONOTONICITY = "1.0"
-$env:DQN_HEURISTIC_SMOOTHNESS = "1.0"
-$env:DQN_HEURISTIC_EMPTY_CELLS = "1.0"
-$env:DQN_HEURISTIC_CORNER = "1.0"
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
+python -m training.compare --smoke --seeds 42 43 --output-dir results/comparison_smoke_new
+python -m training.analyze --input-dir results/comparison_smoke_new --smoothing-window 25
+python -m training.evaluate --checkpoint models/ra_d3qn_2048.pt --episodes 100 --episodes-csv results/ra_evaluation.csv
 ```
 
-This is the recommended submission demonstration configuration. At startup, the
-GUI logs the checkpoint and selected inference settings. Heuristics only break
-actions whose legal-action Q-values are within the configured relative window.
+Comparison data is written beneath the chosen output directory, including
+`manifest.json`, `results.csv`, `summary.csv`, and per-run metrics, histories,
+checkpoints, and `evaluation.csv` exports. `training.analyze` reads saved output
+without further training or game evaluation and writes a descriptive report and
+plots. The repository currently contains comparison outputs under
+`results/`; Dueling transfer/training artifacts are under `artifacts/dueling_dqn/`.
 
-### Original RA-D3QN inference
+## Results and Research Findings
 
-The original policy uses the checkpoint's saved risk coefficient (`0.10`),
-deterministic greedy selection, and legal-action masking. It does not use the
-inference-time coefficient override or heuristic tie-breaker.
+The checked-in `results/comparison_smoke/analysis/report.md` records a
+two-seed, one-episode-per-agent smoke comparison with evaluations capped at 32
+moves. All evaluated episodes were truncated by that cap. The observed mean
+scores were random 194, greedy 204, DQN 169, Double DQN 175, Dueling DQN 144,
+Dueling Double DQN 144, and RA-D3QN 146. These are pipeline-check observations,
+not complete-game outcomes, convergence evidence, or a reliable model ranking.
+The report includes sample standard deviations and other descriptive metrics.
 
-```powershell
-$env:DQN_CHECKPOINT = "models\ra_d3qn_2048.pt"
-$env:DQN_INFERENCE_POLICY = "original"
-Remove-Item Env:DQN_RISK_COEFFICIENT -ErrorAction SilentlyContinue
-Remove-Item Env:DQN_TIE_TOLERANCE -ErrorAction SilentlyContinue
-Remove-Item Env:DQN_HEURISTIC_MONOTONICITY -ErrorAction SilentlyContinue
-Remove-Item Env:DQN_HEURISTIC_SMOOTHNESS -ErrorAction SilentlyContinue
-Remove-Item Env:DQN_HEURISTIC_EMPTY_CELLS -ErrorAction SilentlyContinue
-Remove-Item Env:DQN_HEURISTIC_CORNER -ErrorAction SilentlyContinue
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
-```
+The handbook also preserves historical test and smoke-run records. They describe
+earlier verification snapshots, not tests run as part of this documentation
+update. Multi-seed training, ablations, risk sensitivity, and robustness studies
+remain necessary before claiming that risk-aware action selection improves play.
 
-You can also select the original callable directly with
-`--agent inference.autoplay:choose_action_original`.
-
-### Other trained models
-
-Each command explicitly selects its checkpoint. These non-RA models retain the
-original deterministic, legal-masked policy.
-
-```powershell
-# DQN
-$env:DQN_CHECKPOINT = "models\dqn_baseline_2048.pt"
-Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
-
-# Double DQN
-$env:DQN_CHECKPOINT = "models\doubledqn_2048.pt"
-Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
-
-# Dueling DQN
-$env:DQN_CHECKPOINT = "models\dueling_dqn_shared.pt"
-Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
-
-# Dueling Double DQN
-$env:DQN_CHECKPOINT = "models\dueling_double_dqn_2048.pt"
-Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
-```
-
-The `agent` mode requires an action callable in `module:callable` format. The
-project callable supports the checkpoint files listed above. A compatible custom
-callable can also be supplied with `--agent`.
-
-### Built-in game modes
-
-These modes do not use a model checkpoint. Clear any checkpoint or policy
-selection left over from an agent demonstration before running them.
-
-```powershell
-# Human: arrow keys or WASD move; R restarts; Q or Esc quits
-Remove-Item Env:DQN_CHECKPOINT -ErrorAction SilentlyContinue
-Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
-python -m gui.pygame_demo --mode human
-
-# Random legal moves, using a repeatable seed
-python -m gui.pygame_demo --mode random --seed 42 --delay-ms 180
-
-# Simple heuristic autoplay
-python -m gui.pygame_demo --mode heuristic --delay-ms 180
-
-# Standalone MCTS demo, separate from the ML model and training workflow
-python -m gui.pygame_demo --mode mcts --delay-ms 140 --mcts-simulations 200 --mcts-rollout-depth 36
-```
-
-For autoplay, Space pauses or resumes, R restarts, +/- adjusts speed, and Q or
-Esc quits. This checkout does not define separate Vs Bot or Pass and Play modes.
-
-`training.train` uses a masked Dueling Double DQN: the MLP receives the 16
-log2 tile exponents, experience replay decorrelates updates, score rewards are
-scaled for stable Q-targets, and the target network is softly synchronized.
-Illegal moves are excluded in both behaviour and bootstrapping, which is
-important because the environment otherwise permits them. Training runs for
-the requested number of episodes. A checkpoint is saved after training (and
-every 250 episodes by default).
-
-Inference prefers `models/ra_d3qn_2048.pt` when `DQN_CHECKPOINT` is unset, then
-falls back to `models/dqn_2048_enhanced.pt` or `models/dqn_baseline_2048.pt`.
-Set `DQN_CHECKPOINT` to select a specific saved model.
-
-### Separate Double DQN training
-
-`rl/doubledqn.py` provides `DoubleDQNAgent` and the Double DQN next-action
-calculation. It reuses the existing DQN network, replay buffer, learning loop,
-and evaluation interface. The online network selects the best legal next
-action and the target network evaluates it; terminal states do not bootstrap.
-The original `DQNAgent` and its `double_dqn=False` standard-DQN option remain
-available. Algorithm tests live in `tests/test_doubledqn.py`.
-
-The dedicated trainer starts fresh when its checkpoint does not exist and
-otherwise resumes automatically. Its shared default save interval is 250
-episodes (`--checkpoint-every` changes the interval), using atomic replacement.
-Saved state includes online/target networks, optimizer, replay, training history,
-episode/global-step counters, exploration settings, and RNG states.
-`--episodes` is the total episode target, not additional episodes. Restart the
-same command after interruption; only work since the last saved episode is lost.
-`--fresh` intentionally restarts and replaces the selected checkpoint.
-`--resume PATH` selects an existing checkpoint and, unless `--checkpoint` is
-specified, continues saving there. Saved model/training settings take precedence;
-you can change the total episode target, device, output path and save interval.
-Legacy checkpoints retain weights/counters but lack replay/RNG and saved schedule:
-they refill replay and use the supplied exploration settings with the saved step.
-CPU continuation is tested against uninterrupted training; identical results
-across devices or library versions are not guaranteed. Checkpoints are larger
-because they include replay. Plain Double DQN is the default; `--dueling` selects
-the Dueling Double DQN ablation. No new dependencies are required.
-
-```bash
-# Short CPU smoke run with learning enabled
-python -m training.train_doubledqn --episodes 1 --max-steps-per-episode 32 --batch-size 4 --min-replay-size 4 --device cpu --checkpoint models/doubledqn_smoke.pt
-
-# Plain Double DQN training from scratch, when ready
-python -m training.train_doubledqn --no-dueling --episodes 2000 --seed 42 --checkpoint models/doubledqn_2048.pt
-
-# Evaluate using the existing evaluator
-python -m training.evaluate --checkpoint models/doubledqn_2048.pt --episodes 100
-```
-
-The Double DQN CLI also exposes `--reward-scale`, `--gradient-clip-norm`,
-`--max-exponent`, and `--hidden-dims`. Use `--hard-target-updates` with
-`--target-update-interval` to select periodic target copies; otherwise
-`--target-tau` controls soft updates. Defaults are unchanged, and saved settings
-still take precedence on resume. Training history additionally records update
-counts, global steps, termination/truncation, Q/target means, absolute TD error,
-and gradient norm. Q/target/loss values use scaled reward units; episode scores
-and rewards remain in raw units. Missing warm-up diagnostics are NaN.
-
-For validation without training, environment moves, backward passes, or
-optimizer updates, run the dedicated standard-library test suite:
-
-```bash
-python -B -m unittest tests.test_double_dqn_validation -v
-```
-
-### Risk-aware action evaluation (proposal objective 4)
-
-`rl/risk.py` implements a configurable risk score for each legal action's
-deterministic afterstate, using the existing game rules without modifying the
-live board or consuming random numbers:
+## Project Structure
 
 ```text
-mobility risk = 1 - legal moves / 4
-crowding risk = 1 - empty cells / board cells
-spawn danger = probability that the next tile spawn immediately ends the game
-R(s, a) = weighted mean of these three components
-Q_RA(s, a) = Q(s, a) - lambda * R(s, a)
+game/       game rules and RL environment
+rl/         DQN agents, replay, risk scoring, and reference policies
+training/   training, evaluation, comparison, and analysis CLIs
+inference/  checkpoint inference policies and policy studies
+mcts/       Monte Carlo Tree Search agent
+gui/        Pygame demonstration
+models/     model checkpoints and fallback backups
+results/    experiment outputs and generated analysis
+artifacts/  Dueling transfer and training records
+tests/      unit and integration tests
 ```
 
-Mobility and empty cells are measured before the random spawn. Spawn danger
-uses the configured probability of a 2 versus a 4: with one empty cell it
-checks both outcomes; with at least two empty cells a single spawn cannot end
-a reachable game. This is a local calculation, with no rollouts or tree search.
-The composite score is a heuristic in [0, 1], not a probability of eventual
-failure. Equal default weights are an initial design choice, not a result
-established by the proposal or experiments. `RiskConfig` allows ablations.
+## Testing
 
-```python
-import numpy as np
-from game.environment import Env2048
-from rl.doubledqn import DoubleDQNAgent
-from rl.risk import risk_adjusted_q_values
+Run the test suite from the repository root after installing dependencies:
 
-env = Env2048(seed=42)
-state = env.reset()
-agent = DoubleDQNAgent()  # Fresh model; this example is not a trained policy.
-values = risk_adjusted_q_values(env.game, agent.q_values(state), risk_coefficient=0.1)
-action = int(np.argmax(values))
-next_state, reward, done, info = env.step(action)
+```powershell
+python -m pytest -q
 ```
 
-Lambda is in the network's Q-value units, which already reflect reward
-scaling. Zero lambda reproduces the masked baseline; illegal moves remain
-excluded. The utility leaves rewards and learning targets unchanged. The
-policy-only RA-D3QN integration below now uses it during training and inference.
+The most recent verification record in the handbook is dated 2026-11-01 and
+reports 180 passed tests plus 63 subtests. This documentation task did not run
+tests or training.
 
-Run the focused tests with `python3 -m pytest tests/test_risk.py -q`.
+## Limitations
 
-### RA-D3QN training, evaluation, and inference
+- The recorded comparison is a short, truncated smoke run; substantive
+  multi-seed performance results are not available in that report.
+- RA-D3QN changes the behavior policy only. Its Q targets still estimate ordinary
+  score return, and its coefficient and risk weights have not been established
+  as optimal.
+- MCTS is a demo baseline, not an optimal solver or a trained model.
+- The analysis reports descriptive statistics, not significance tests or
+  automatic model rankings.
 
-`rl/risk_aware.py` provides `RiskAwareDQNAgent`: a Dueling Double DQN with
-`Q - lambda * R` greedy action selection. Epsilon exploration still samples
-uniformly from legal actions. This first variant adjusts the **behaviour
-policy only**. It retains the existing score rewards, reward scaling, replay,
-and ordinary Double DQN targets (`argmax Q_online`, evaluated by `Q_target`).
-The network therefore learns the ordinary score-return objective; it does not
-learn a risk-adjusted return. Lambda zero reproduces the baseline behaviour
-and updates. The coefficient and risk weights are saved in the checkpoint.
+## Contributors and Acknowledgements
 
-```bash
-# Short CPU smoke test; epsilon zero ensures it exercises the risk policy.
-python3 -m training.train_risk_aware --episodes 1 --max-steps-per-episode 32 --batch-size 4 --min-replay-size 4 --epsilon-start 0 --epsilon-end 0 --risk-coefficient 0.1 --device cpu --checkpoint models/ra_d3qn_smoke.pt
-
-# Evaluate the smoke checkpoint with a bounded episode length.
-python3 -m training.evaluate --checkpoint models/ra_d3qn_smoke.pt --episodes 2 --max-steps-per-episode 128 --device cpu
-
-# Full training from scratch, when ready; normal epsilon decay is the default.
-python3 -m training.train_risk_aware --episodes 2000 --risk-coefficient 0.1 --checkpoint models/ra_d3qn_2048.pt
-
-# Demo with the saved risk policy (macOS/Linux).
-DQN_CHECKPOINT=models/ra_d3qn_2048.pt python3 -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action
-```
-
-`--mobility-weight`, `--crowding-weight`, and `--game-over-weight` set the
-relative risk weights. The default coefficient 0.1 and equal weights are
-provisional, not experimentally validated. Use `--risk-coefficient 0` for
-the no-risk ablation. The trainer uses the standardized Double DQN options:
-it resumes an existing RA-D3QN checkpoint by default, `--fresh` starts over,
-and `--resume PATH` selects a source checkpoint. `--checkpoint PATH` selects
-the output path, while `--episodes` is the total episode target. Checkpoints
-include model, optimizer, replay, training progress, RNG state, and risk settings.
-
-```bash
-# Continue the default checkpoint to 3000 total episodes
-python3 -m training.train_risk_aware --episodes 3000
-
-# Resume from a checkpoint into a separate output file
-python3 -m training.train_risk_aware --resume models/ra_d3qn_2048.pt --checkpoint models/ra_d3qn_resumed.pt --episodes 3000
-```
-
-The existing evaluator and GUI loader automatically restore the correct agent
-and saved risk settings. Evaluation now includes reaching 2048, maximum tile,
-episode length, termination/truncation rates, and board-risk statistics.
-Risk statistics pool **pre-action, nonterminal** states and always use equal
-weights for comparable measurement across policies. Low mobility means at
-most one legal move; high risk uses `--high-risk-threshold` (default 0.5).
-Game-over excludes step-limit truncation. Without a step limit, completed 2048
-episodes naturally have game-over rate 1; that alone cannot measure robustness.
-Evaluation also reports mean risk-adjusted reward: raw score minus saved lambda
-times the sum of chosen-action risk scores, converted to raw-score units using
-the checkpoint reward scale. Baselines have lambda zero, so their risk-adjusted
-reward equals score. This is descriptive policy performance, not the training
-return or a calibrated probability of failure.
-
-Run the integration tests with `python3 -m pytest tests/test_risk_aware.py -q`.
-Multi-seed training, comparisons with all proposed baselines, and lambda/weight
-ablations remain necessary before claiming improved gameplay.
-
-### Reproducible baseline comparisons
-
-`training/compare.py` reuses the shared trainer/evaluator and explicitly
-configures every learned baseline:
-
-| Agent name | Double DQN | Dueling | Risk-aware policy |
-| --- | --- | --- | --- |
-| `dqn` | No | No | No |
-| `double_dqn` | Yes | No | No |
-| `dueling_dqn` | No | Yes | No |
-| `dueling_double_dqn` | Yes | Yes | No |
-| `ra_d3qn` | Yes | Yes | Yes |
-
-`random` samples legal moves uniformly. `greedy` maximizes immediate merge
-score and breaks ties by action id; it is distinct from the GUI heuristic.
-Both are non-learning reference policies defined in `rl/baselines.py`.
-
-```bash
-# Small pipeline check for all seven policies, using two seeds.
-python3 -m training.compare --smoke --seeds 42 43 --output-dir results/comparison_smoke
-
-# Full experiment, when ready (potentially expensive; not a smoke test).
-python3 -m training.compare --episodes 2000 --seeds 42 43 44 --eval-episodes 100 --device cpu --output-dir results/comparison_full
-
-# Focused zero-risk ablation, using a NEW output directory.
-python3 -m training.compare --smoke --agents dueling_double_dqn ra_d3qn --risk-coefficient 0 --output-dir results/zero_risk_smoke
-```
-
-`--smoke` overrides training to 1 episode capped at 32 steps, evaluation to
-2 episodes capped at 32 steps, CPU, batch/warmup size 4, and epsilon zero to
-exercise greedy/risk policies. It does not validate playing strength. Without
-`--smoke`, normal training defaults and epsilon decay apply. Optional
-`--eval-max-steps` caps evaluation; uncapped evaluation is the default.
-
-The output directory must be new. It contains `manifest.json` with settings,
-software versions, and completion/failure status; `results.csv` with one row
-per agent/seed; and `summary.csv` with means and sample standard deviations
-across run metrics. Each learned run retains its checkpoint and `history.csv`
-in `<agent>/seed_<seed>/`; every run saves `metrics.json`. Warm-up losses are
-blank, not zero. Completed partial results survive a later run failure.
-
-All policies use the same evaluation environment seed range, separate from
-the supplied training/policy seeds. Random-policy seeds control action RNG;
-greedy rows repeat a deterministic policy and are not independent replicates.
-Single-run summary standard deviations are blank. These statistics are not
-confidence intervals. Training uses equal episode/step limits, not equal
-realized updates; actual steps, updates, model flags, parameter counts, and
-devices are recorded. Dueling changes parameter count despite common hidden
-widths. Risk measurement uses the shared evaluator's equal-weight definition.
-
-Run `python3 -m pytest tests/test_comparison.py -q` for comparison tests.
-
-### Episode exports and analysis
-
-New comparison runs save `evaluation.csv` beside each run's metrics and
-checkpoint. It records episode/environment seed, score, maximum tile, move
-count, termination versus truncation, and pre-action board-risk measurements.
-Aggregate metrics remain unchanged; decision-state risk averages use the
-number of moves, not equal weighting of unequal-length episodes.
-
-```bash
-# Analyze saved comparison data without training or playing any more games.
-python3 -m training.analyze --input-dir results/comparison_smoke --smoothing-window 25
-
-# Export individual episodes when evaluating a single checkpoint.
-python3 -m training.evaluate --checkpoint models/ra_d3qn_2048.pt --episodes 100 --episodes-csv results/ra_evaluation.csv
-```
-
-Analysis writes a new `analysis/` directory containing `report.md`,
-`evaluation.png`, `training.png` (when training histories exist), and
-`episode_scores.png` (when episode exports exist). Use `--output-dir` for a
-different location; existing analysis directories and episode CSVs are never
-overwritten. Matplotlib, already in `requirements.txt`, renders headlessly.
-
-Training curves show a separate line per seed and a trailing episode mean;
-missing warm-up losses remain missing. Evaluation error bars show sample
-standard deviation across **run means**, not confidence intervals. Episode
-scores are pooled descriptively and are not independent training replicates.
-The report labels partial comparisons, capped evaluations, missing older-format
-episode exports, and single-run standard deviations. It does not automatically
-declare significance, convergence, or a winning agent. Smoke charts are not
-evidence of trained-model performance.
-
-Run `python3 -m pytest tests/test_analysis.py -q` for export/analysis tests.
-
-## Repository structure
-
-```
-2048-risk-aware-rl/
-├── game/
-│   ├── game.py          # pure 2048 rules engine (board, moves, merges, spawn, game-over)
-│   └── environment.py   # RL-facing wrapper: encoding, reward, Gym-like step/reset, action simulation
-├── rl/
-│   ├── dqn.py            # DQN network (MLP)
-│   ├── replay_buffer.py  # experience replay
-│   ├── agent.py           # epsilon-greedy agent, training loop glue
-│   └── risk.py            # Board Risk Index + action-specific risk (Section 9-12)
-├── gui/
-│   ├── pygame_ui.py       # human-play + AI autoplay rendering
-│   └── visualizer.py      # Q-value / risk analysis overlay
-├── training/
-│   ├── train.py           # training entrypoint (Standard DQN / Risk-Aware DQN)
-│   └── evaluate.py         # batch evaluation across many episodes, metrics (Section 22)
-├── inference/
-│   └── autoplay.py         # load trained_model.pth, run/greedy-play, no learning
-├── models/                 # saved .pth checkpoints
-├── tests/
-│   └── test_game.py         # unit tests for game mechanics + environment
-└── requirements.txt
-```
-
-## Status
-
-- [x] Step 1: 2048 environment (`game/game.py`, `game/environment.py`) + unit tests
-- [x] Step 2: Random & immediate-score greedy evaluation baselines
-- [x] Step 3: Pure Monte Carlo Tree Search demo agent
-- [x] Step 4: Evaluation framework and multi-seed comparison runner (full experiments pending)
-- [x] Step 5: Standard DQN (MLP) + replay buffer + target network + training loop
-- [x] Step 6: Board Risk Index + action-specific risk module
-- [x] Step 7: Policy-only RA-D3QN (risk-adjusted action selection; unchanged rewards)
-- [ ] Step 8: Ablation study
-- [ ] Step 9: Risk-sensitivity (λ sweep) experiments
-- [ ] Step 10: Robustness / generalization experiments
-- [ ] Step 11: Pygame GUI (human mode, autoplay, analysis overlay)
-- [ ] Step 12: Optional CNN-DQN comparison
-- [ ] Step 13: Final report / presentation
-
-See project context doc for full research questions, risk formulation, and
-the 10–12 week plan / group division of labor.
+The demo-only Pygame interface adapts visual layout and event-loop ideas from
+[pygame-2048 by Arbel Amram](https://github.com/arbelamram/pygame-2048). See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the license notice.

@@ -2,7 +2,7 @@
 
 ## Purpose and current position
 
-This repository is building a research-style 2048 agent for studying
+This repository implements a research-style 2048 agent for studying
 long-horizon decisions under stochastic tile spawns. The foundation, planning
 baseline, DQN baseline, training workflow, inference adapter, and presentation
 GUI are implemented. `rl/risk.py` now provides board/afterstate risk and the
@@ -12,9 +12,9 @@ checkpoint/GUI inference. A multi-seed comparison runner now covers the five
 learned variants plus random and immediate-score greedy reference policies.
 Full comparative training/experiments and the final report are still pending.
 
-In short: the project has a working and tested **standard DQN baseline** and
-an **MCTS comparison/demo agent**; it is ready for proper training runs and
-the risk-aware research phase.
+In short: the repository includes a tested five-variant training workflow and
+an independent MCTS demo. The included smoke results validate the experiment
+pipeline only; substantive comparative research remains to be done.
 
 ## What has been completed
 
@@ -31,7 +31,7 @@ the risk-aware research phase.
 | Analysis tooling | Implemented; substantive results pending | Per-episode evaluation exports, per-seed training curves, evaluation/episode plots, and a descriptive Markdown report. |
 | Training and evaluation | Complete | CLI trainer with epsilon schedule/checkpoints and deterministic greedy batch evaluation. |
 | Inference and GUI | Complete | Checkpoint-loading action callable and Pygame modes for human, random, heuristic, MCTS, and supplied-agent play. |
-| Saved artefacts | Present | A trained checkpoint is included in `models/dqn_2048.pt`; the merged checkpoint records 1,672,322 learning updates. |
+| Saved artefacts | Present | The five standard trainer checkpoints are in `models/`: `dqn_baseline_2048.pt`, `doubledqn_2048.pt`, `dueling_dqn_shared.pt`, `dueling_double_dqn_2048.pt`, and `ra_d3qn_2048.pt`. Four have `.pt.previous` fallback copies. |
 
 ## How the implemented system works
 
@@ -277,16 +277,17 @@ lambda-zero baseline equivalence, unchanged RNG state during risk evaluation,
 and a successful temporary checkpoint save/load. This does not establish
 playing-strength improvements or constitute a trained RA-D3QN model.
 
-The original baseline workspace was checked with:
+An earlier baseline workspace snapshot (not the current checkpoint inventory) was checked with:
 
 ```powershell
 pytest -q
 ```
 
-Result: **25 passed**. A five-episode CPU smoke evaluation of the bundled
+Result: **25 passed**. A five-episode CPU smoke evaluation of the then-bundled
 `models/dqn_2048.pt` also ran successfully (mean score 1112.8; 3/5 games
-reached tile 128). This is a runtime sanity check only, not a statistically
-reliable benchmark.
+reached tile 128). That checkpoint is not present in the current checkout.
+This is a historical runtime sanity check, not a statistically reliable
+benchmark.
 
 ## Episode export and analysis verification (2026-10-21)
 
@@ -298,7 +299,7 @@ reliable benchmark.
 - These runs use one training episode and a 32-step evaluation cap; they verify
   the pipeline and do not establish comparative performance or convergence.
 
-## Current stabilization verification (2026-11-01)
+## Latest recorded stabilization verification (2026-11-01)
 
 - Full test suite: `python -m pytest -q` — **180 passed, 63 subtests in 13.00s**.
 - CLI defaults and checkpoint round-trip tests cover all five standardized
@@ -338,10 +339,10 @@ pip install -r requirements.txt
 pytest -q
 
 # Small comparison pipeline check (choose a new output directory each time)
-python -m training.compare --smoke --seeds 42 43 --output-dir results/comparison_smoke
+python -m training.compare --smoke --seeds 42 43 --output-dir results/comparison_smoke_new
 
 # Plot saved results without any further training (analysis directory must be new)
-python -m training.analyze --input-dir results/comparison_smoke --smoothing-window 25
+python -m training.analyze --input-dir results/comparison_smoke_new --smoothing-window 25
 
 # Train the plain DQN baseline
 python -m training.train --episodes 2000 --seed 42 --checkpoint models/dqn_baseline_2048.pt
@@ -374,5 +375,6 @@ python -m gui.pygame_demo --mode mcts --mcts-simulations 200
 - Standalone trainers print/store histories in checkpoint metadata; the new
   comparison runner additionally exports history, metric, and episode CSVs.
   Analysis plots are available; plots from substantive trained runs remain pending.
-- Some README structure entries still describe planned GUI/report components;
-  do not infer implementation from the illustrative tree alone.
+- This handbook retains dated test records and commands as project history.
+  The README is the current quick-start and command reference; use the current
+  trainer defaults and checkpoint names documented there.

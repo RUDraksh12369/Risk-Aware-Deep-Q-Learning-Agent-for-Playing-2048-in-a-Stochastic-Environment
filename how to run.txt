@@ -1,40 +1,15 @@
-2048 Risk-Aware Deep Q-Learning Project
+2048 Risk-Aware RL: additional inference options
 
-Run all commands from the project root with the virtual environment
-activated and dependencies installed.
-1. Train all five models
-Train all five agents sequentially for 50,000 episodes each:
-python -m training.train_all --episodes 50000 --device cuda
+Run commands from the repository root after installing requirements and
+activating the virtual environment. The README.md is the canonical guide for
+installation, training, evaluation, checkpoints, and GUI modes.
 
-The command trains these models:
-- DQN --- models/dqn_baseline_2048.pt
-- Double DQN --- models/doubledqn_2048.pt
-- Dueling DQN --- models/dueling_dqn_shared.pt
-- Dueling Double DQN --- models/dueling_double_dqn_2048.pt
-- Risk-Aware Dueling Double DQN (RA-D3QN) --- models/ra_d3qn_2048.pt
-Existing checkpoints resume automatically. Use --fresh to start
-training from scratch. The --episodes value is the total target
-episode count.
+Optimized RA-D3QN GUI policy (PowerShell)
 
-
-2. Train models individually
-Change --episodes to the desired total episode target.
-
-DQN
-python -m training.train --episodes 2000 --seed 42 --checkpoint models/dqn_baseline_2048.pt
-Double DQN
-python -m training.train_doubledqn --episodes 2000 --seed 42 --checkpoint models/doubledqn_2048.pt
-Dueling DQN
-python -m training.train_duelingdqn --episodes 2000 --seed 42
-Dueling Double DQN
-python -m training.train_double_dueling_dqn --episodes 2000 --seed 42
-Risk-Aware Dueling Double DQN (RA-D3QN)
-python -m training.train_risk_aware --episodes 2000 --seed 42 --risk-coefficient 0.1
-3. Recommended submission demonstration: optimized RA-D3QN
-Open PowerShell in the project root and activate the existing virtual
-environment. Copy and run this complete block. It explicitly sets the checkpoint
-and optimized inference options so old shell settings cannot select a different
-policy.
+This selects the included RA-D3QN checkpoint and uses an inference-time risk
+coefficient and heuristic tie-breaker. These settings do not modify the
+checkpoint. The heuristic only chooses between legal actions whose Q-values
+fall within the configured relative tolerance.
 
 $env:DQN_CHECKPOINT = "models\ra_d3qn_2048.pt"
 Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
@@ -46,16 +21,9 @@ $env:DQN_HEURISTIC_EMPTY_CELLS = "1.0"
 $env:DQN_HEURISTIC_CORNER = "1.0"
 python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
 
-This is the recommended submission demonstration configuration. The GUI logs
-the selected checkpoint and inference settings when it starts. The risk override
-and tie-breaker operate only at inference time; the checkpoint stays unchanged.
-The heuristic is consulted only when legal-action Q-values are within the 0.01
-relative window.
-
-4. Run the original RA-D3QN inference
-This uses the checkpoint's saved risk coefficient of 0.10, greedy selection,
-and legal-action masking. It does not apply the inference-time coefficient
-override or heuristic tie-breaking.
+The GUI logs the loaded checkpoint and policy settings at startup. To use the
+checkpoint's saved risk coefficient and original greedy policy instead, select
+the original policy and clear inference-only overrides:
 
 $env:DQN_CHECKPOINT = "models\ra_d3qn_2048.pt"
 $env:DQN_INFERENCE_POLICY = "original"
@@ -67,55 +35,5 @@ Remove-Item Env:DQN_HEURISTIC_EMPTY_CELLS -ErrorAction SilentlyContinue
 Remove-Item Env:DQN_HEURISTIC_CORNER -ErrorAction SilentlyContinue
 python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
 
-Alternatively, use the original callable directly:
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action_original --delay-ms 140
-
-5. Run another trained model
-For each run, set the matching checkpoint explicitly. These models use their
-original greedy legal-action policy.
-
-DQN
-$env:DQN_CHECKPOINT = "models\dqn_baseline_2048.pt"
-Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
-
-Double DQN
-$env:DQN_CHECKPOINT = "models\doubledqn_2048.pt"
-Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
-
-Dueling DQN
-$env:DQN_CHECKPOINT = "models\dueling_dqn_shared.pt"
-Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
-
-Dueling Double DQN
-$env:DQN_CHECKPOINT = "models\dueling_double_dqn_2048.pt"
-Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
-python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action --delay-ms 140
-
-The `agent` mode requires `--agent module:callable`; the commands above use the
-project's checkpoint-compatible callable. No Python files need manual edits.
-
-6. Built-in game modes
-These modes do not load trained checkpoints. Clear a checkpoint from the current
-PowerShell session before switching from an agent demo.
-
-Human play (arrow keys/WASD move; R restarts; Q or Esc quits):
-Remove-Item Env:DQN_CHECKPOINT -ErrorAction SilentlyContinue
-Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
-python -m gui.pygame_demo --mode human
-
-Random legal-move autoplay (seed 42 makes the game repeatable):
-python -m gui.pygame_demo --mode random --seed 42 --delay-ms 180
-
-Simple heuristic autoplay:
-python -m gui.pygame_demo --mode heuristic --delay-ms 180
-
-Standalone MCTS demo (not part of an ML model or training workflow):
-python -m gui.pygame_demo --mode mcts --delay-ms 140 --mcts-simulations 200 --mcts-rollout-depth 36
-
-Autoplay controls: Space pauses or resumes, R restarts, +/- adjusts speed, and
-Q or Esc quits. The GUI modes implemented in this checkout are human, random,
-heuristic, mcts, and agent; separate Vs Bot and Pass and Play modes are not
-implemented here.
+Alternatively, the original callable can be selected directly with
+--agent inference.autoplay:choose_action_original.

@@ -1,6 +1,6 @@
 # Comparison analysis
 
-Source: `/Users/harshkumar/Desktop/AU_Docs/AI_lab/Risk-Aware-Deep-Q-Learning-Agent-for-Playing-2048-in-a-Stochastic-Environment/results/comparison_smoke`
+Source: `results/comparison_smoke`
 Run status: **completed**; recorded agent/seed runs: **14**.
 
 This report is descriptive. It does not establish statistical significance, convergence, or a winning agent.
