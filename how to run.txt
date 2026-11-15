@@ -4,6 +4,71 @@ Run commands from the repository root after installing requirements and
 activating the virtual environment. The README.md is the canonical guide for
 installation, training, evaluation, checkpoints, and GUI modes.
 
+Train one model
+
+Use the matching command below to train an individual variant. The default
+checkpoint path is shown in each command. If that checkpoint already exists,
+training resumes it; use --fresh-run only when you intentionally want a new
+experiment. --episodes is the total target episode count.
+
+DQN
+python -m training.train --episodes 2000 --seed 42
+
+Double DQN
+python -m training.train_doubledqn --episodes 2000 --seed 42
+
+Dueling DQN
+python -m training.train_duelingdqn --episodes 2000 --seed 42
+
+Dueling Double DQN
+python -m training.train_double_dueling_dqn --episodes 2000 --seed 42
+
+Risk-Aware Dueling Double DQN (RA-D3QN)
+python -m training.train_risk_aware --episodes 2000 --seed 42 --risk-coefficient 0.1
+
+Evaluate a trained model
+
+Use the checkpoint for the model you trained. These commands run 100 seeded
+greedy evaluation episodes:
+
+python -m training.evaluate --checkpoint models/dqn_baseline_2048.pt --episodes 100
+python -m training.evaluate --checkpoint models/doubledqn_2048.pt --episodes 100
+python -m training.evaluate --checkpoint models/dueling_dqn_shared.pt --episodes 100
+python -m training.evaluate --checkpoint models/dueling_double_dqn_2048.pt --episodes 100
+python -m training.evaluate --checkpoint models/ra_d3qn_2048.pt --episodes 100
+
+Play a trained model in the GUI
+
+Set DQN_CHECKPOINT to the model to play, then launch agent mode. The callable
+automatically uses the ordinary legal-action greedy policy for the four
+non-risk-aware variants. Clear any RA-D3QN inference overrides when switching
+from the optimized RA-D3QN example later in this file.
+
+DQN
+$env:DQN_CHECKPOINT = "models\dqn_baseline_2048.pt"
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action
+
+Double DQN
+$env:DQN_CHECKPOINT = "models\doubledqn_2048.pt"
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action
+
+Dueling DQN
+$env:DQN_CHECKPOINT = "models\dueling_dqn_shared.pt"
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action
+
+Dueling Double DQN
+$env:DQN_CHECKPOINT = "models\dueling_double_dqn_2048.pt"
+Remove-Item Env:DQN_INFERENCE_POLICY -ErrorAction SilentlyContinue
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action
+
+RA-D3QN, using its saved risk settings
+$env:DQN_CHECKPOINT = "models\ra_d3qn_2048.pt"
+$env:DQN_INFERENCE_POLICY = "original"
+python -m gui.pygame_demo --mode agent --agent inference.autoplay:choose_action
+
 Optimized RA-D3QN GUI policy (PowerShell)
 
 This selects the included RA-D3QN checkpoint and uses an inference-time risk
